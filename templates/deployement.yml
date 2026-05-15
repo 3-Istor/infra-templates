@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app
+  namespace: myprojet
+  labels:
+    app: app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app
+  template:
+    metadata:
+      labels:
+        app: app
+    spec:
+      imagePullSecrets:
+        - name: app-registry
+      containers:
+        - name: app
+          image: //TOFIX
+          ports:
+            - containerPort: 8000
+          env:
+            -name : USERNAME
+             valueFrom:
+               secretKeyRef:
+                 name: app-secret
+                 key: USERNAME
+            -name : PASSWORD
+             valueFrom:
+               secretKeyRef:
+                 name: app-secret
+                 key: PASSWORD
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

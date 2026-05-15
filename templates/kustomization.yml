@@ -1,0 +1,6 @@
+kind: Kustomization
+namespace: myprojet
+resources:
+  - deployment.yml
+  - service.yml
+  - secret.yml
