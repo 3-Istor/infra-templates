@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: app
-  namespace: myprojet
+  namespace: dev-sandbox 
   labels:
     app: app
 spec:
@@ -19,17 +19,17 @@ spec:
         - name: app-registry
       containers:
         - name: app
-          image: //TOFIX
+          image: ghcr.io/3-istor/template-app-webapp-python-fastapi-react/backend:latest
           ports:
             - containerPort: 8000
           env:
-            -name : USERNAME
-             valueFrom:
+            - name: USERNAME
+              valueFrom:
                secretKeyRef:
                  name: app-secret
                  key: USERNAME
-            -name : PASSWORD
-             valueFrom:
+            - name: PASSWORD
+              valueFrom:
                secretKeyRef:
                  name: app-secret
                  key: PASSWORD
