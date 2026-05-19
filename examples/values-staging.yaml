@@ -1,0 +1,101 @@
+# =============================================================================
+# EXEMPLE: Configuration pour environnement STAGING
+# =============================================================================
+
+replicaCount: 2
+
+image:
+  repository: mycompany/myapp
+  pullPolicy: IfNotPresent
+  tag: "v1.2.3-rc1"
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: app-staging.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          portName: http
+  tls:
+    - secretName: app-staging-tls
+      hosts:
+        - app-staging.example.com
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 75
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /ready
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 5
+
+env:
+  - name: ENVIRONMENT
+    value: "staging"
+  - name: LOG_LEVEL
+    value: "info"
+  - name: DATABASE_HOST
+    valueFrom:
+      secretKeyRef:
+        name: generic-app
+        key: database-host
+
+configMap:
+  enabled: true
+  data:
+    config.json: |
+      {
+        "features": {
+          "newUI": true,
+          "betaFeatures": true
+        }
+      }
+
+secret:
+  enabled: true
+  type: Opaque
+  data:
+    database-host: "postgres-staging.example.com"
+    database-password: "staging-password"
+
+commonLabels:
+  environment: staging
+  managed-by: terraform
+
+commonAnnotations:
+  deployed-by: ci-cd-pipeline

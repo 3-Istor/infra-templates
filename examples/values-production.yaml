@@ -1,0 +1,214 @@
+# =============================================================================
+# EXEMPLE: Configuration pour environnement PRODUCTION
+# =============================================================================
+
+replicaCount: 5
+
+image:
+  repository: mycompany/myapp
+  pullPolicy: IfNotPresent
+  tag: "v1.2.3"
+
+serviceAccount:
+  create: true
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789:role/prod-app-role
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+
+podLabels:
+  team: platform
+  component: api
+  criticality: high
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  hosts:
+    - host: app.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+          portName: http
+  tls:
+    - secretName: app-prod-tls
+      hosts:
+        - app.example.com
+
+resources:
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+  requests:
+    cpu: 1000m
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 5
+  maxReplicas: 50
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /ready
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+startupProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 30
+
+env:
+  - name: ENVIRONMENT
+    value: "production"
+  - name: LOG_LEVEL
+    value: "warn"
+  - name: NODE_ENV
+    value: "production"
+  - name: DATABASE_HOST
+    valueFrom:
+      secretKeyRef:
+        name: generic-app
+        key: database-host
+  - name: DATABASE_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: generic-app
+        key: database-password
+  - name: REDIS_URL
+    valueFrom:
+      secretKeyRef:
+        name: generic-app
+        key: redis-url
+
+configMap:
+  enabled: true
+  data:
+    config.json: |
+      {
+        "features": {
+          "newUI": true,
+          "betaFeatures": false
+        },
+        "cache": {
+          "ttl": 3600,
+          "maxSize": 1000
+        },
+        "rateLimit": {
+          "enabled": true,
+          "maxRequests": 100,
+          "windowMs": 60000
+        }
+      }
+
+secret:
+  enabled: true
+  type: Opaque
+  data:
+    database-host: "postgres-prod.example.com"
+    database-password: "super-secure-production-password"
+    redis-url: "redis://redis-prod.example.com:6379"
+    api-key: "prod-api-key-xyz"
+
+nodeSelector:
+  node-type: application
+  environment: production
+
+tolerations:
+  - key: "dedicated"
+    operator: "Equal"
+    value: "production"
+    effect: "NoSchedule"
+
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+                - generic-app
+        topologyKey: kubernetes.io/hostname
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: node-type
+              operator: In
+              values:
+                - application
+
+lifecycle:
+  preStop:
+    exec:
+      command: ["/bin/sh", "-c", "sleep 15"]
+
+commonLabels:
+  environment: production
+  team: platform
+  cost-center: engineering
+  managed-by: terraform
+  criticality: high
+
+commonAnnotations:
+  deployed-by: terraform
+  contact: devops@example.com
+  pagerduty: "https://example.pagerduty.com/services/ABC123"
