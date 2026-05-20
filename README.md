@@ -9,19 +9,9 @@ infra-templates/
 ├── Chart.yaml
 ├── values.yaml
 ├── templates/
-│   ├── _helpers.tpl
 │   ├── deployment.yaml
 │   ├── service.yaml
-│   ├── configmap.yaml
-│   ├── secret.yaml
-│   ├── ingress.yaml
-│   ├── hpa.yaml
 │   └── serviceaccount.yaml
-└── examples/
-    ├── terraform-example.tf
-    ├── values-api-backend.yaml
-    ├── values-frontend.yaml
-    └── values-worker.yaml
 ```
 
 ## Utilisation avec Helm

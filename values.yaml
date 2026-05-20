@@ -155,23 +155,6 @@ envFrom: []
 #     name: app-secrets
 
 # -----------------------------------------------------------------------------
-# ConfigMap
-# -----------------------------------------------------------------------------
-configMap:
-  enabled: false
-  # Données du ConfigMap (clé-valeur)
-  data: {}
-  # config.json: |
-  #   {
-  #     "feature_flags": {
-  #       "new_ui": true
-  #     }
-  #   }
-  # application.properties: |
-  #   server.port=8080
-  #   logging.level=INFO
-
-# -----------------------------------------------------------------------------
 # Volumes & Volume Mounts
 # -----------------------------------------------------------------------------
 volumes: []
