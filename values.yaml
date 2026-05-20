@@ -8,6 +8,7 @@
 # -----------------------------------------------------------------------------
 nameOverride: ""
 fullnameOverride: ""
+namespace: dev-sandbox
 
 # Nombre de réplicas (peut être overridé par HPA)
 replicaCount: 1
@@ -16,7 +17,7 @@ replicaCount: 1
 # Image Configuration
 # -----------------------------------------------------------------------------
 image:
-  repository: nginx
+  repository: ghcr.io/3-istor/template-app-webapp-python-fastapi-react/backend
   pullPolicy: IfNotPresent
   tag: "latest"
 

@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "generic-app.fullname" . }}
+  namespace: {{ .Values.namespace }}
   labels:
     {{- include "generic-app.labels" . | nindent 4 }}
   {{- with (include "generic-app.annotations" .) }}
