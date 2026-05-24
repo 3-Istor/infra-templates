@@ -13,6 +13,11 @@ namespace: dev-sandbox
 # Nombre de réplicas (peut être overridé par HPA)
 replicaCount: 1
 
+# Vault Secrets Operator Configuration
+secrets:
+  enabled: false
+  vaultPath: "" # e.g., "kvv2/projects/my-project/my-app"
+
 # -----------------------------------------------------------------------------
 # Image Configuration
 # -----------------------------------------------------------------------------
@@ -21,8 +26,8 @@ image:
   pullPolicy: IfNotPresent
   tag: "latest"
 
-imagePullSecrets: []
-# - name: regcred
+imagePullSecrets:
+  - name: app-registry
 
 # -----------------------------------------------------------------------------
 # Pod Annotations et Labels
@@ -55,7 +60,7 @@ service:
   # Ports multiples supportés
   ports:
     - name: http
-      port: 80
+      port: 8000
       targetPort: 8080
       protocol: TCP
   # - name: metrics
@@ -68,13 +73,13 @@ service:
 # -----------------------------------------------------------------------------
 # Resources (Requests & Limits)
 # -----------------------------------------------------------------------------
-resources: {}
-# limits:
-#   cpu: 500m
-#   memory: 512Mi
-# requests:
-#   cpu: 250m
-#   memory: 256Mi
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
 
 # -----------------------------------------------------------------------------
 # Node Scheduling

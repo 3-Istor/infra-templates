@@ -1,28 +1,13 @@
-{{- if .Values.service.enabled }}
+{{- if .Values.configMap.enabled }}
 apiVersion: v1
-kind: Service
+kind: ConfigMap
 metadata:
-  name: {{ include "generic-app.fullname" . }}
-  namespace: {{ .Values.namespace }}
+  name: {{ include "cnp-generic-app.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "generic-app.labels" . | nindent 4 }}
-  annotations:
-    {{- include "generic-app.annotations" . | nindent 4 }}
-    {{- with .Values.service.annotations }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
-spec:
-  type: {{ .Values.service.type }}
-  ports:
-  {{- range .Values.service.ports }}
-  - port: {{ .port }}
-    targetPort: {{ .targetPort }}
-    protocol: {{ .protocol | default "TCP" }}
-    name: {{ .name }}
-    {{- if and (eq $.Values.service.type "NodePort") .nodePort }}
-    nodePort: {{ .nodePort }}
-    {{- end }}
+    {{- include "cnp-generic-app.labels" . | nindent 4 }}
+data:
+  {{- with .Values.configMap.data }}
+  {{- toYaml . | nindent 2 }}
   {{- end }}
-  selector:
-    {{- include "generic-app.selectorLabels" . | nindent 4 }}
 {{- end }}
