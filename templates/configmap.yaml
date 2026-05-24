@@ -1,12 +1,12 @@
-{{- if .Values.configMap.enabled }}
+{{- if and .Values.configMap .Values.configMap.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "generic-app.fullname" . }}
+  name: {{ include "cnp-generic-app.fullname" . }}
   namespace: {{ .Values.namespace }}
   labels:
-    {{- include "generic-app.labels" . | nindent 4 }}
-  {{- with (include "generic-app.annotations" .) }}
+    {{- include "cnp-generic-app.labels" . | nindent 4 }}
+  {{- with (include "cnp-generic-app.annotations" .) }}
   annotations:
     {{- . | nindent 4 }}
   {{- end }}

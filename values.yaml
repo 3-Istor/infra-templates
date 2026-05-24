@@ -139,6 +139,10 @@ startupProbe:
   timeoutSeconds: 3
   failureThreshold: 30
 
+configMap:
+  enabled: false
+  data: {}
+
 # -----------------------------------------------------------------------------
 # Environment Variables
 # -----------------------------------------------------------------------------
