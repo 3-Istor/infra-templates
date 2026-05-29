@@ -25,7 +25,6 @@ spec:
     
     clientSecret:
       name: {{ include "cnp-generic-app.fullname" . }}-secrets
-      key: client-secret
     
     redirectURL: "https://{{ .Values.ingress.hostname }}/oauth2/callback"
     logoutPath: "/logout"
