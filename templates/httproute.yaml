@@ -15,5 +15,5 @@ spec:
   rules:
     - backendRefs:
         - name: {{ include "cnp-generic-app.fullname" . }}
-          port: {{ .Values.service.port }}
+          port: {{ (index .Values.service.ports 0).port | default 80 }}
 {{- end }}
