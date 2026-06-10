@@ -19,7 +19,8 @@ replicaCount: 1
 # Vault Secrets Operator Configuration
 secrets:
   enabled: false
-  vaultPath: "" # e.g., "kvv2/projects/my-project/my-app"
+  vaultPath: ""       # Format: "project-<project_name>/<app_name>"
+  vaultRole: ""       # Format: "<project_name>-<app_name>-role"
 
 # -----------------------------------------------------------------------------
 # Image Configuration
@@ -31,6 +32,14 @@ image:
 
 imagePullSecrets:
   - name: app-registry
+
+# -----------------------------------------------------------------------------
+# Pod Annotations et Labels
+# -----------------------------------------------------------------------------
+db:
+  enabled: false
+  name: ""
+  storage: "1Gi"
 
 # -----------------------------------------------------------------------------
 # Pod Annotations et Labels
