@@ -10,7 +10,8 @@ spec:
   type: kubernetes.io/basic-auth
   templates:
     username: "app"
-    password: "{% .Secrets.database-password %}"
+    password: "{{`{{ .Secrets.database_password }}`}}"
+
 ---
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
