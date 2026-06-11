@@ -1,18 +1,4 @@
-{{- if .Values.db.enabled }}
-apiVersion: ricoberger.de/v1alpha1
-kind: VaultSecret
-metadata:
-  name: {{ include "cnp-generic-app.fullname" . }}-db-credentials
-  namespace: {{ .Release.Namespace }}
-spec:
-  path: {{ .Values.secrets.vaultPath }}
-  vaultRole: {{ .Release.Namespace }}-role
-  type: kubernetes.io/basic-auth
-  templates:
-    username: "app"
-    password: "{{`{{ .Secrets.database_password }}`}}"
-
----
+#cnpg-cluster.yaml
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
