@@ -11,7 +11,7 @@ spec:
       database: {{ .Values.db.name | default .Values.app_name }}
       owner: app
       secret:
-        name: {{ include "cnp-generic-app.fullname" . }}-credentials 
+        name: {{ include "cnp-generic-app.fullname" . }}-secrets
   storage:
     size: {{ .Values.db.storage | default "1Gi" }}
     storageClass: local-path

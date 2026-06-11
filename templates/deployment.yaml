@@ -40,7 +40,7 @@ spec:
         envFrom:
           {{- if .Values.secrets.enabled }}
           - secretRef:
-              name: {{ include "cnp-generic-app.fullname" . }}-credentials
+              name: {{ include "cnp-generic-app.fullname" . }}-secrets
           {{- end }}
           {{- with .Values.envFrom }}
             {{- toYaml . | nindent 10 }}
