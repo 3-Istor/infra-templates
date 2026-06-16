@@ -16,6 +16,14 @@ namespace: dev-sandbox
 # Nombre de réplicas (peut être overridé par HPA)
 replicaCount: 1
 
+tunnel:
+  enabled: false
+
+ingress:
+  enabled: false
+  hostname: ""
+  sso_protected: false
+
 # Vault Secrets Operator Configuration
 secrets:
   enabled: false

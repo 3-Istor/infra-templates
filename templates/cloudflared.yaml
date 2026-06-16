@@ -1,3 +1,4 @@
+{{- if and .Values.tunnel .Values.tunnel.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -36,3 +37,4 @@ spec:
             limits:
               cpu: "50m"
               memory: "32Mi"
+{{- end }}
