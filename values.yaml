@@ -16,9 +16,6 @@ namespace: dev-sandbox
 # Nombre de réplicas (peut être overridé par HPA)
 replicaCount: 1
 
-tunnel:
-  enabled: false
-
 ingress:
   enabled: false
   hostname: ""
