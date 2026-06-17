@@ -1,4 +1,5 @@
 {{- if and .Values.ingress.enabled .Values.ingress.sso_protected }}
+{{- $realm := default "3istor" .Values.ingress.realm }}
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: SecurityPolicy
 metadata:
@@ -11,9 +12,9 @@ spec:
       name: {{ include "cnp-generic-app.fullname" . }}-route
   oidc:
     provider:
-      issuer: "https://auth.3istor.com/realms/3istor"
-      authorizationEndpoint: "https://auth.3istor.com/realms/3istor/protocol/openid-connect/auth"
-      tokenEndpoint: "https://auth.3istor.com/realms/3istor/protocol/openid-connect/token"
+      issuer: "https://auth.3istor.com/realms/{{ $realm }}"
+      authorizationEndpoint: "https://auth.3istor.com/realms/{{ $realm }}/protocol/openid-connect/auth"
+      tokenEndpoint: "https://auth.3istor.com/realms/{{ $realm }}/protocol/openid-connect/token"
     
     clientID: "cnp-{{ .Values.project_name }}-{{ .Values.app_name }}"
     
