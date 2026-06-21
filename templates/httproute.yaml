@@ -8,7 +8,7 @@ metadata:
     {{- include "cnp-generic-app.labels" . | nindent 4 }}
   annotations:
     gatus.3istor.com/{{ .Values.project_name }}-enabled: "true"
-    gatus.home-operations.com/endpoint: |
+    gatus.3istor.com/{{ .Values.project_name }}-endpoint: |
       group: "Applications"
       conditions:
         - "[STATUS] == 200"
