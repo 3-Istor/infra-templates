@@ -6,6 +6,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "cnp-generic-app.labels" . | nindent 4 }}
+    project: {{ .Values.project_name | quote }}
   annotations:
     {{- if .Values.monitoring.enabled }}
     gatus.io/enabled: "true"
