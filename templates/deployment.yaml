@@ -5,6 +5,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "cnp-generic-app.labels" . | nindent 4 }}
+    project: {{ .Values.project_name | quote }}
 spec:
   {{- if not (and .Values.autoscaling .Values.autoscaling.enabled) }}
   replicas: {{ .Values.replicaCount | default 1 }}
