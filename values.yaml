@@ -235,3 +235,9 @@ commonAnnotations: {}
 monitoring:
   enabled: true
   path: "/"
+
+offhours:
+  enabled: false
+  sleepAt: "0 1 * * *"
+  wakeAt: "0 7 * * *" 
+  timezone: "Europe/Paris"
