@@ -7,11 +7,13 @@ metadata:
   labels:
     {{- include "cnp-generic-app.labels" . | nindent 4 }}
   annotations:
+    {{- if .Values.monitoring.enabled }}
     gatus.3istor.com/{{ .Values.project_name }}-enabled: "true"
     gatus.3istor.com/{{ .Values.project_name }}-endpoint: |
       group: "Applications"
       conditions:
         - "[STATUS] == 200"
+    {{- end }}
 spec:
   parentRefs:
     - name: shared-gateway
