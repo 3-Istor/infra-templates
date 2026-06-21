@@ -11,7 +11,7 @@ metadata:
     gatus.3istor.com/{{ .Values.project_name }}-enabled: "true"
     gatus.3istor.com/{{ .Values.project_name }}-endpoint: |
       group: "Services Internes"
-      path: "{{ .Values.monitoring.path | default "/" }}"
+      url: "http://{{ include "cnp-generic-app.fullname" . }}.{{ .Release.Namespace }}.svc:{{ (index .Values.service.ports 0).port }}{{ .Values.monitoring.path | default "/" }}"
       conditions:
         - "[STATUS] == 200"
     {{- end }}
