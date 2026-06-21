@@ -4,6 +4,8 @@ kind: OffhoursSchedule
 metadata:
   name: {{ include "cnp-generic-app.fullname" . }}-schedule
   namespace: {{ .Release.Namespace }}
+  labels:
+    project: {{ .Values.project_name | quote }}
 spec:
   targetRefs:
     - name: {{ include "cnp-generic-app.fullname" . }}
