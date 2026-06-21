@@ -6,16 +6,10 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "cnp-generic-app.labels" . | nindent 4 }}
-    project: {{ .Values.project_name | quote }}
+  {{- with .Values.service.annotations }}
   annotations:
-    {{- if .Values.monitoring.enabled }}
-    gatus.io/enabled: "true"
-    gatus.io/path: {{ .Values.monitoring.path | default "/" | quote }}
-    gatus.io/group: "Applications"
-    {{- end }}
-    {{- with .Values.service.annotations }}
     {{- toYaml . | nindent 4 }}
-    {{- end }}
+  {{- end }}
 spec:
   type: {{ .Values.service.type | default "ClusterIP" }}
   ports:
