@@ -17,6 +17,7 @@ spec:
     metadata:
       labels:
         {{- include "cnp-generic-app.selectorLabels" . | nindent 8 }}
+        tenant: {{ .Values.project_name | quote }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
