@@ -5,7 +5,7 @@ metadata:
   name: {{ include "cnp-generic-app.fullname" . }}-db
   namespace: {{ .Release.Namespace }}
 spec:
-  instances: 1
+  instances: {{ .Values.db.instances }}
   bootstrap:
     initdb:
       database: {{ .Values.db.name | default .Values.app_name }}
@@ -14,5 +14,24 @@ spec:
         name: {{ include "cnp-generic-app.fullname" . }}-secrets
   storage:
     size: {{ .Values.db.storage | default "1Gi" }}
-    storageClass: local-path
+    {{- /* local-path exists only on-prem; every other cluster profile supplies its own. */}}
+    storageClass: {{ .Values.db.storageClass }}
+  {{- if .Values.db.backup.enabled }}
+  backup:
+    retentionPolicy: {{ .Values.db.backup.retentionPolicy | quote }}
+    barmanObjectStore:
+      destinationPath: "{{ .Values.db.backup.destinationPath }}"
+      {{- with .Values.db.backup.endpointURL }}
+      endpointURL: {{ . | quote }}
+      {{- end }}
+      s3Credentials:
+        accessKeyId:
+          name: {{ .Values.db.backup.credentialsSecret }}
+          key: {{ .Values.db.backup.accessKeyIdKey }}
+        secretAccessKey:
+          name: {{ .Values.db.backup.credentialsSecret }}
+          key: {{ .Values.db.backup.secretAccessKeyKey }}
+      wal:
+        compression: {{ .Values.db.backup.walCompression }}
+  {{- end }}
 {{- end }}

@@ -21,8 +21,8 @@ metadata:
     {{- end }}
 spec:
   parentRefs:
-    - name: shared-gateway
-      namespace: gateway-infra
+    - name: {{ .Values.ingress.gateway.name }}
+      namespace: {{ .Values.ingress.gateway.namespace }}
   hostnames:
     - {{ .Values.ingress.hostname | quote }}
   rules:
