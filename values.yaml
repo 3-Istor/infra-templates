@@ -21,6 +21,29 @@ ingress:
   hostname: ""
   sso_protected: false
 
+  # Which Gateway this app's HTTPRoute attaches to. Defaults to the shared
+  # gateway so existing apps are unaffected; a project that owns its own Gateway
+  # (D-05) points this at <project>-system/<project>-gateway.
+  gateway:
+    name: shared-gateway
+    namespace: gateway-infra
+
+  # OIDC provider for the SecurityPolicy. baseURL is the central Keycloak by
+  # default; a project running its own Keycloak IAMaaS (D-04) sets issuer to
+  # https://auth-<project>.3istor.com/realms/<realm>.
+  #
+  # Whatever is set here must be the hostname the *browser* sees. Envoy needs a
+  # cluster-local resolution path for the same name, not a different name.
+  oidc:
+    baseURL: https://auth.3istor.com
+    issuer: ""      # overrides baseURL + realm when set
+    clientID: ""    # defaults to cnp-<project_name>-<app_name>
+
+  # One cloudflared connector per Helm release. Set false once the project owns
+  # a single connector in <project>-system (D-06).
+  tunnel:
+    perRelease: true
+
 # Vault Secrets Operator Configuration
 secrets:
   enabled: false
@@ -45,6 +68,34 @@ db:
   enabled: false
   name: ""
   storage: "1Gi"
+
+  # local-path is the on-prem storage class and does not exist on AWS or GCP.
+  # The per-cluster profile supplies the right one (D-08).
+  storageClass: local-path
+
+  # A single instance on node-local storage does not survive a node loss, which
+  # sits badly next to "an already-deployed application must keep working".
+  # Prod should be at least 2 once the cluster can carry it; staging stays at 1.
+  instances: 1
+
+  # CNPG object-store backup. K3s/k8s/app/garage-s3.yaml is an S3-compatible
+  # on-prem target that is already running.
+  #
+  # Note for the day this is turned on together with offhours: offhours-guard
+  # targets the app Deployment, not the CNPG Cluster, so a scaled-down staging
+  # app leaves its database up and its backup window intact. If the database is
+  # ever added to the offhours targets, the ordering has to be specified here
+  # rather than discovered project by project — otherwise every night produces
+  # failed backups and noisy alerts.
+  backup:
+    enabled: false
+    destinationPath: ""
+    endpointURL: ""
+    credentialsSecret: cnpg-backup-credentials
+    accessKeyIdKey: ACCESS_KEY_ID
+    secretAccessKeyKey: ACCESS_SECRET_KEY
+    retentionPolicy: "30d"
+    walCompression: gzip
 
 # -----------------------------------------------------------------------------
 # Pod Annotations et Labels
