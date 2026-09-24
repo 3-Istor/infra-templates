@@ -41,7 +41,7 @@ spec:
           - name: DB_TYPE
             value: postgres
           - name: DB_HOST
-            value: {{ printf "%s-db-rw" (include "cnp-generic-app.fullname" .) }}
+            value: {{ printf "%s-rw" (include "cnp-generic-app.dbClusterName" .) }}
           - name: DB_PORT
             value: "5432"
           - name: DB_NAME

@@ -22,6 +22,15 @@ Create a default fully qualified app name.
 {{- end }}
 
 {{/*
+CNPG cluster name (see cnpg-cluster.yaml for why this doesn't just reuse
+fullname): capped at 50 chars total, so truncate the release name to 47 and
+append "-db" rather than the chart-name-bearing fullname.
+*/}}
+{{- define "cnp-generic-app.dbClusterName" -}}
+{{- printf "%s-db" (.Release.Name | trunc 47 | trimSuffix "-") }}
+{{- end }}
+
+{{/*
 Create chart name and version as used by the chart label.
 */}}
 {{- define "cnp-generic-app.chart" -}}
