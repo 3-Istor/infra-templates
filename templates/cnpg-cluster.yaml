@@ -2,7 +2,14 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: {{ include "cnp-generic-app.fullname" . }}-db
+  {{- /*
+    CNPG caps cluster names at 50 chars (it derives pod, service and PVC
+    names from this one, which then have to fit Kubernetes' own 63-char DNS
+    label limit with room for -rw/-ro/-1 suffixes) — confirmed live, the
+    admission webhook rejects anything longer outright, so a fullstack app
+    with a normal-length project+app name never gets a database at all.
+  */}}
+  name: {{ include "cnp-generic-app.dbClusterName" . }}
   namespace: {{ .Release.Namespace }}
 spec:
   instances: {{ .Values.db.instances }}
