@@ -17,6 +17,10 @@ ingress:
   enabled: true
   hostname: demo-app-sandbox.3istor.com
   sso_protected: true
+  # Kept on the pre-pin image so the canary diff stays empty: the chart
+  # default moved from cloudflared:latest to a pinned release.
+  tunnel:
+    image: cloudflare/cloudflared:latest
 
 secrets:
   enabled: true
