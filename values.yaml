@@ -20,6 +20,10 @@ ingress:
   enabled: false
   hostname: ""
   sso_protected: false
+  # Groups of the app's realm allowed through, on top of being logged in.
+  # Empty keeps today's behaviour: any user of the realm. A project's realm
+  # maps its platform members to project-members and project-admins.
+  allowedGroups: []
 
   # Which Gateway this app's HTTPRoute attaches to. Defaults to the shared
   # gateway so existing apps are unaffected; a project that owns its own Gateway
