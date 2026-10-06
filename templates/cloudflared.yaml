@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
         - name: cloudflared
-          image: cloudflare/cloudflared:latest
+          image: {{ .Values.ingress.tunnel.image }}
           args:
             - "tunnel"
             - "--no-autoupdate"
