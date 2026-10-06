@@ -32,4 +32,31 @@ spec:
     
     redirectURL: "https://{{ .Values.ingress.hostname }}/oauth2/callback"
     logoutPath: "/logout"
+    {{- if .Values.ingress.allowedGroups }}
+    {{- /*
+      The OAuth2 filter runs before jwt_authn, so forwarding the access token
+      as a Bearer header is what lets the JWT provider below read the groups
+      claim: the token cookies themselves are encrypted.
+    */}}
+    forwardAccessToken: true
+  jwt:
+    providers:
+      - name: keycloak
+        issuer: "{{ $issuer }}"
+        remoteJWKS:
+          uri: "{{ $issuer }}/protocol/openid-connect/certs"
+  authorization:
+    defaultAction: Deny
+    rules:
+      - name: allowed-groups
+        action: Allow
+        principal:
+          jwt:
+            provider: keycloak
+            claims:
+              - name: groups
+                valueType: StringArray
+                values:
+                  {{- toYaml .Values.ingress.allowedGroups | nindent 18 }}
+    {{- end }}
 {{- end }}
