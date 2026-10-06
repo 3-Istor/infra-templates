@@ -83,8 +83,12 @@ db:
   # Prod should be at least 2 once the cluster can carry it; staging stays at 1.
   instances: 1
 
-  # CNPG object-store backup. K3s/k8s/app/garage-s3.yaml is an S3-compatible
-  # on-prem target that is already running.
+  # Off by default: storage is scarce, so a database is backed up only when
+  # its owner asks for it, from the CMP or here.
+  #
+  # The bucket is claimed from the OpenStack Ceph RGW (K3s rook-ceph
+  # object-store.yaml) and belongs to this app: it goes away with the app or
+  # its project unless keepAfterDelete is true.
   #
   # Note for the day this is turned on together with offhours: offhours-guard
   # targets the app Deployment, not the CNPG Cluster, so a scaled-down staging
@@ -94,13 +98,11 @@ db:
   # failed backups and noisy alerts.
   backup:
     enabled: false
-    destinationPath: ""
-    endpointURL: ""
-    credentialsSecret: cnpg-backup-credentials
-    accessKeyIdKey: ACCESS_KEY_ID
-    secretAccessKeyKey: ACCESS_SECRET_KEY
-    retentionPolicy: "30d"
-    walCompression: gzip
+    keepAfterDelete: false
+    # Cron with seconds, as CNPG's ScheduledBackup expects.
+    schedule: "0 0 3 * * *"
+    retentionPolicy: "7d"
+    endpointURL: http://192.168.1.110:7480
 
 # -----------------------------------------------------------------------------
 # Pod Annotations et Labels

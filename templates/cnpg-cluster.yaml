@@ -24,21 +24,10 @@ spec:
     {{- /* local-path exists only on-prem; every other cluster profile supplies its own. */}}
     storageClass: {{ .Values.db.storageClass }}
   {{- if .Values.db.backup.enabled }}
-  backup:
-    retentionPolicy: {{ .Values.db.backup.retentionPolicy | quote }}
-    barmanObjectStore:
-      destinationPath: "{{ .Values.db.backup.destinationPath }}"
-      {{- with .Values.db.backup.endpointURL }}
-      endpointURL: {{ . | quote }}
-      {{- end }}
-      s3Credentials:
-        accessKeyId:
-          name: {{ .Values.db.backup.credentialsSecret }}
-          key: {{ .Values.db.backup.accessKeyIdKey }}
-        secretAccessKey:
-          name: {{ .Values.db.backup.credentialsSecret }}
-          key: {{ .Values.db.backup.secretAccessKeyKey }}
-      wal:
-        compression: {{ .Values.db.backup.walCompression }}
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: {{ include "cnp-generic-app.dbClusterName" . }}-backup
   {{- end }}
 {{- end }}
