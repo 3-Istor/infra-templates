@@ -1,4 +1,13 @@
 {{- if .Values.db.enabled }}
+{{- $restore := .Values.db.restore | default dict }}
+{{- if not (gt (int ($restore.generation | default 0)) 0) }}
+{{- $restore = false }}
+{{- else }}
+{{- if not .Values.db.backup.enabled }}
+{{- fail "db.restore needs db.backup.enabled: a database is restored from its backups" }}
+{{- end }}
+{{- $_ := required "db.restore.sourceServer names the cluster whose backups are restored" $restore.sourceServer }}
+{{- end }}
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
@@ -14,11 +23,29 @@ metadata:
 spec:
   instances: {{ .Values.db.instances }}
   bootstrap:
+    {{- if $restore }}
+    recovery:
+      source: origin
+      database: {{ .Values.db.name | default .Values.app_name }}
+      owner: app
+      secret:
+        name: {{ include "cnp-generic-app.fullname" . }}-secrets
+      recoveryTarget:
+        {{- with $restore.backupID }}
+        backupID: {{ . | quote }}
+        {{- end }}
+        {{- if $restore.targetTime }}
+        targetTime: {{ $restore.targetTime | quote }}
+        {{- else }}
+        targetImmediate: true
+        {{- end }}
+    {{- else }}
     initdb:
       database: {{ .Values.db.name | default .Values.app_name }}
       owner: app
       secret:
         name: {{ include "cnp-generic-app.fullname" . }}-secrets
+    {{- end }}
   storage:
     size: {{ .Values.db.storage | default "1Gi" }}
     {{- /* local-path exists only on-prem; every other cluster profile supplies its own. */}}
@@ -28,6 +55,15 @@ spec:
     - name: barman-cloud.cloudnative-pg.io
       isWALArchiver: true
       parameters:
-        barmanObjectName: {{ include "cnp-generic-app.dbClusterName" . }}-backup
+        barmanObjectName: {{ include "cnp-generic-app.dbBaseName" . }}-backup
+  {{- end }}
+  {{- if $restore }}
+  externalClusters:
+    - name: origin
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: {{ include "cnp-generic-app.dbBaseName" . }}-backup
+          serverName: {{ $restore.sourceServer }}
   {{- end }}
 {{- end }}
