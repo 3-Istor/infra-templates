@@ -1,10 +1,11 @@
 {{- if and .Values.db.enabled .Values.db.backup.enabled }}
+{{- $base := include "cnp-generic-app.dbBaseName" . }}
 {{- $cluster := include "cnp-generic-app.dbClusterName" . }}
-{{- $bucket := printf "cnpg-%s" $cluster }}
+{{- $bucket := printf "cnpg-%s" $base }}
 apiVersion: objectbucket.io/v1alpha1
 kind: ObjectBucketClaim
 metadata:
-  name: {{ $cluster }}-backup
+  name: {{ $base }}-backup
   namespace: {{ .Release.Namespace }}
 spec:
   bucketName: {{ $bucket }}
@@ -13,7 +14,7 @@ spec:
 apiVersion: barmancloud.cnpg.io/v1
 kind: ObjectStore
 metadata:
-  name: {{ $cluster }}-backup
+  name: {{ $base }}-backup
   namespace: {{ .Release.Namespace }}
 spec:
   retentionPolicy: {{ .Values.db.backup.retentionPolicy | quote }}
@@ -23,10 +24,10 @@ spec:
     {{- /* The ObjectBucketClaim's Secret, created by Rook with the bucket. */}}
     s3Credentials:
       accessKeyId:
-        name: {{ $cluster }}-backup
+        name: {{ $base }}-backup
         key: AWS_ACCESS_KEY_ID
       secretAccessKey:
-        name: {{ $cluster }}-backup
+        name: {{ $base }}-backup
         key: AWS_SECRET_ACCESS_KEY
     wal:
       compression: gzip
@@ -36,7 +37,7 @@ spec:
 apiVersion: postgresql.cnpg.io/v1
 kind: ScheduledBackup
 metadata:
-  name: {{ $cluster }}-daily
+  name: {{ $base }}-daily
   namespace: {{ .Release.Namespace }}
 spec:
   schedule: {{ .Values.db.backup.schedule | quote }}

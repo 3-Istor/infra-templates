@@ -104,6 +104,22 @@ db:
     retentionPolicy: "7d"
     endpointURL: http://192.168.1.110:7480
 
+  # Written by the CMP's restore button, not by hand. Bumping generation
+  # creates a new cluster recovered from the backups of sourceServer (the
+  # cluster name a backup was taken from) and switches the app to it; Argo CD
+  # then removes the previous cluster, whose backups and WAL stay in the
+  # bucket so the restore itself can be undone the same way. generation only
+  # ever grows: a new cluster refuses a WAL archive that already has data.
+  #
+  # backupID picks the base backup; without targetTime the database is
+  # restored as it was when that backup ended, with it the WAL is replayed up
+  # to that instant (RFC 3339).
+  restore:
+    generation: 0
+    sourceServer: ""
+    backupID: ""
+    targetTime: ""
+
 # -----------------------------------------------------------------------------
 # Pod Annotations et Labels
 # -----------------------------------------------------------------------------
