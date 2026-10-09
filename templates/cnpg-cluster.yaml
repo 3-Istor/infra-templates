@@ -22,6 +22,9 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   instances: {{ .Values.db.instances }}
+  {{- with .Values.db.imageName }}
+  imageName: {{ . }}
+  {{- end }}
   bootstrap:
     {{- if $restore }}
     recovery:

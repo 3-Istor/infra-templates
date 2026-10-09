@@ -31,6 +31,9 @@ db:
   enabled: true
   name: demoapp
   storage: 2Gi
+  # Kept on the operator's default so the canary diff stays empty: the chart
+  # default moved to a pinned PostgreSQL 18.6.
+  imageName: ""
 
 offhours:
   enabled: true
