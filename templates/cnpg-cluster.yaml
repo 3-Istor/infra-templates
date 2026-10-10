@@ -1,0 +1,72 @@
+{{- if .Values.db.enabled }}
+{{- $restore := .Values.db.restore | default dict }}
+{{- if not (gt (int ($restore.generation | default 0)) 0) }}
+{{- $restore = false }}
+{{- else }}
+{{- if not .Values.db.backup.enabled }}
+{{- fail "db.restore needs db.backup.enabled: a database is restored from its backups" }}
+{{- end }}
+{{- $_ := required "db.restore.sourceServer names the cluster whose backups are restored" $restore.sourceServer }}
+{{- end }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  {{- /*
+    CNPG caps cluster names at 50 chars (it derives pod, service and PVC
+    names from this one, which then have to fit Kubernetes' own 63-char DNS
+    label limit with room for -rw/-ro/-1 suffixes) — confirmed live, the
+    admission webhook rejects anything longer outright, so a fullstack app
+    with a normal-length project+app name never gets a database at all.
+  */}}
+  name: {{ include "cnp-generic-app.dbClusterName" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  instances: {{ .Values.db.instances }}
+  {{- with .Values.db.imageName }}
+  imageName: {{ . }}
+  {{- end }}
+  bootstrap:
+    {{- if $restore }}
+    recovery:
+      source: origin
+      database: {{ .Values.db.name | default .Values.app_name }}
+      owner: app
+      secret:
+        name: {{ include "cnp-generic-app.fullname" . }}-secrets
+      recoveryTarget:
+        {{- with $restore.backupID }}
+        backupID: {{ . | quote }}
+        {{- end }}
+        {{- if $restore.targetTime }}
+        targetTime: {{ $restore.targetTime | quote }}
+        {{- else }}
+        targetImmediate: true
+        {{- end }}
+    {{- else }}
+    initdb:
+      database: {{ .Values.db.name | default .Values.app_name }}
+      owner: app
+      secret:
+        name: {{ include "cnp-generic-app.fullname" . }}-secrets
+    {{- end }}
+  storage:
+    size: {{ .Values.db.storage | default "1Gi" }}
+    {{- /* local-path exists only on-prem; every other cluster profile supplies its own. */}}
+    storageClass: {{ .Values.db.storageClass }}
+  {{- if .Values.db.backup.enabled }}
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: {{ include "cnp-generic-app.dbBaseName" . }}-backup
+  {{- end }}
+  {{- if $restore }}
+  externalClusters:
+    - name: origin
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: {{ include "cnp-generic-app.dbBaseName" . }}-backup
+          serverName: {{ $restore.sourceServer }}
+  {{- end }}
+{{- end }}

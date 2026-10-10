@@ -1,0 +1,47 @@
+# The regression canary: a values file shaped like an application that is already
+# running in production, SSO-protected, with a database and offhours enabled.
+#
+# CI renders the chart with this file on the base branch and on the PR branch and
+# diffs the two. The diff must be empty. That is the R-1 mitigation: the shared
+# chart is rendered by every running application, so one careless change breaks
+# all of them at once, and "I checked" is not a control.
+#
+# If a change genuinely has to alter this output, update this file in the same PR
+# and say so in the description — the point is that it becomes a visible decision
+# rather than a silent one.
+project_name: sandbox
+app_name: demo-app
+namespace: sandbox-demo-app
+
+ingress:
+  enabled: true
+  hostname: demo-app-sandbox.3istor.com
+  sso_protected: true
+  # Kept on the pre-pin image so the canary diff stays empty: the chart
+  # default moved from cloudflared:latest to a pinned release.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+
+secrets:
+  enabled: true
+  vaultPath: project-sandbox/demo-app
+  vaultRole: sandbox-demo-app-role
+
+db:
+  enabled: true
+  name: demoapp
+  storage: 2Gi
+  # Kept on the operator's default so the canary diff stays empty: the chart
+  # default moved to a pinned PostgreSQL 18.6.
+  imageName: ""
+
+offhours:
+  enabled: true
+
+configMap:
+  enabled: true
+  data:
+    LOG_LEVEL: info
+
+autoscaling:
+  enabled: true

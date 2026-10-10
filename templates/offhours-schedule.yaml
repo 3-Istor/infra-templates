@@ -1,0 +1,15 @@
+{{- if .Values.offhours.enabled }}
+apiVersion: guard.3istor.com/v1alpha1
+kind: OffhoursSchedule
+metadata:
+  name: {{ include "cnp-generic-app.fullname" . }}-schedule
+  namespace: {{ .Release.Namespace }}
+  labels:
+    project: {{ .Values.project_name | quote }}
+spec:
+  targetRefs:
+    - name: {{ include "cnp-generic-app.fullname" . }}
+  sleepAt: {{ .Values.offhours.sleepAt | default "0 1 * * *" | quote }}
+  wakeAt: {{ .Values.offhours.wakeAt | default "0 7 * * *" | quote }}
+  timezone: {{ .Values.offhours.timezone | default "Europe/Paris" | quote }}
+{{- end }}

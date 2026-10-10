@@ -3,6 +3,9 @@
 # Ce fichier contient toutes les valeurs par défaut pour le chart générique
 # =============================================================================
 
+project_name: ""
+app_name: ""
+
 # -----------------------------------------------------------------------------
 # Application Configuration
 # -----------------------------------------------------------------------------
@@ -13,10 +16,44 @@ namespace: dev-sandbox
 # Nombre de réplicas (peut être overridé par HPA)
 replicaCount: 1
 
+ingress:
+  enabled: false
+  hostname: ""
+  sso_protected: false
+  # Groups of the app's realm allowed through, on top of being logged in.
+  # Empty keeps today's behaviour: any user of the realm. A project's realm
+  # maps its platform members to project-members and project-admins.
+  allowedGroups: []
+
+  # Which Gateway this app's HTTPRoute attaches to. Defaults to the shared
+  # gateway so existing apps are unaffected; a project that owns its own Gateway
+  # (D-05) points this at <project>-system/<project>-gateway.
+  gateway:
+    name: shared-gateway
+    namespace: gateway-infra
+
+  # OIDC provider for the SecurityPolicy. baseURL is the central Keycloak by
+  # default; a project running its own Keycloak IAMaaS (D-04) sets issuer to
+  # https://auth-<project>.3istor.com/realms/<realm>.
+  #
+  # Whatever is set here must be the hostname the *browser* sees. Envoy needs a
+  # cluster-local resolution path for the same name, not a different name.
+  oidc:
+    baseURL: https://auth.3istor.com
+    issuer: ""      # overrides baseURL + realm when set
+    clientID: ""    # defaults to cnp-<project_name>-<app_name>
+
+  # One cloudflared connector per Helm release. Set false once the project owns
+  # a single connector in <project>-system (D-06).
+  tunnel:
+    perRelease: true
+    image: cloudflare/cloudflared:2026.10.0@sha256:9b49eed8f62806d5d45ddf59ecefb5710429598ea6d3fcccd2af938f621b2b07
+
 # Vault Secrets Operator Configuration
 secrets:
   enabled: false
-  vaultPath: "" # e.g., "kvv2/projects/my-project/my-app"
+  vaultPath: ""       # Format: "project-<project_name>/<app_name>"
+  vaultRole: ""       # Format: "<project_name>-<app_name>-role"
 
 # -----------------------------------------------------------------------------
 # Image Configuration
@@ -28,6 +65,65 @@ image:
 
 imagePullSecrets:
   - name: app-registry
+
+# -----------------------------------------------------------------------------
+# Pod Annotations et Labels
+# -----------------------------------------------------------------------------
+db:
+  enabled: false
+  name: ""
+  storage: "1Gi"
+
+  # local-path is the on-prem storage class and does not exist on AWS or GCP.
+  # The per-cluster profile supplies the right one (D-08).
+  storageClass: local-path
+
+  # Pinned rather than left to the operator's default, which is frozen into
+  # each Cluster when it is created: a new default never reaches existing
+  # databases. Same major only; a minor bump is a rolling restart.
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6-202610050823-system-trixie@sha256:3e89ea90485ffda67094fd6950d9d61dec9ec314aabc8d63c048c67759918621
+
+  # A single instance on node-local storage does not survive a node loss, which
+  # sits badly next to "an already-deployed application must keep working".
+  # Prod should be at least 2 once the cluster can carry it; staging stays at 1.
+  instances: 1
+
+  # Off by default: storage is scarce, so a database is backed up only when
+  # its owner asks for it, from the CMP or here.
+  #
+  # The bucket is claimed from the OpenStack Ceph RGW (K3s rook-ceph
+  # object-store.yaml) and belongs to this app: it goes away with the app or
+  # its project unless keepAfterDelete is true.
+  #
+  # Note for the day this is turned on together with offhours: offhours-guard
+  # targets the app Deployment, not the CNPG Cluster, so a scaled-down staging
+  # app leaves its database up and its backup window intact. If the database is
+  # ever added to the offhours targets, the ordering has to be specified here
+  # rather than discovered project by project — otherwise every night produces
+  # failed backups and noisy alerts.
+  backup:
+    enabled: false
+    keepAfterDelete: false
+    # Cron with seconds, as CNPG's ScheduledBackup expects.
+    schedule: "0 0 3 * * *"
+    retentionPolicy: "7d"
+    endpointURL: http://192.168.1.110:7480
+
+  # Written by the CMP's restore button, not by hand. Bumping generation
+  # creates a new cluster recovered from the backups of sourceServer (the
+  # cluster name a backup was taken from) and switches the app to it; Argo CD
+  # then removes the previous cluster, whose backups and WAL stay in the
+  # bucket so the restore itself can be undone the same way. generation only
+  # ever grows: a new cluster refuses a WAL archive that already has data.
+  #
+  # backupID picks the base backup; without targetTime the database is
+  # restored as it was when that backup ended, with it the WAL is replayed up
+  # to that instant (RFC 3339).
+  restore:
+    generation: 0
+    sourceServer: ""
+    backupID: ""
+    targetTime: ""
 
 # -----------------------------------------------------------------------------
 # Pod Annotations et Labels
@@ -214,3 +310,17 @@ commonLabels: {}
 # -----------------------------------------------------------------------------
 commonAnnotations: {}
 # managed-by: terraform
+
+monitoring:
+  enabled: true
+  path: "/"
+
+# How long Loki keeps this app's logs: 7d, 14d or 30d (default 14d). A
+# project-level logRetention, set on the namespace, wins over this one.
+logRetention: ""
+
+offhours:
+  enabled: false
+  sleepAt: "0 1 * * *"
+  wakeAt: "0 7 * * *" 
+  timezone: "Europe/Paris"

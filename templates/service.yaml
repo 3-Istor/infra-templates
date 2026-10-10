@@ -6,10 +6,22 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "cnp-generic-app.labels" . | nindent 4 }}
-  {{- with .Values.service.annotations }}
   annotations:
+    {{- if and .Values.monitoring.enabled (not .Values.ingress.enabled) .Values.project_name }}
+    gatus.3istor.com/{{ .Values.project_name }}-enabled: "true"
+    gatus.3istor.com/{{ .Values.project_name }}-endpoint: |
+      group: "Services Internes"
+      {{- if .Values.offhours.enabled }}
+      url: "http://offhours-guard.{{ .Values.project_name }}-system.svc.cluster.local:8082/health/{{ .Release.Namespace }}/{{ include "cnp-generic-app.fullname" . }}?port={{ (index .Values.service.ports 0).port }}&path={{ .Values.monitoring.path | default "/" }}"
+      {{- else }}
+      url: "http://{{ include "cnp-generic-app.fullname" . }}.{{ .Release.Namespace }}.svc:{{ (index .Values.service.ports 0).port }}{{ .Values.monitoring.path | default "/" }}"
+      {{- end }}
+      conditions:
+        - "[STATUS] == 200"
+    {{- end }}
+    {{- with .Values.service.annotations }}
     {{- toYaml . | nindent 4 }}
-  {{- end }}
+    {{- end }}
 spec:
   type: {{ .Values.service.type | default "ClusterIP" }}
   ports:

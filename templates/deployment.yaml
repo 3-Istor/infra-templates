@@ -5,6 +5,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "cnp-generic-app.labels" . | nindent 4 }}
+    project: {{ .Values.project_name | quote }}
 spec:
   {{- if not (and .Values.autoscaling .Values.autoscaling.enabled) }}
   replicas: {{ .Values.replicaCount | default 1 }}
@@ -16,6 +17,10 @@ spec:
     metadata:
       labels:
         {{- include "cnp-generic-app.selectorLabels" . | nindent 8 }}
+        tenant: {{ .Values.project_name | quote }}
+        {{- with .Values.logRetention }}
+        cnp.3istor.com/log-retention: {{ . | quote }}
+        {{- end }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -33,9 +38,31 @@ spec:
           protocol: {{ .protocol | default "TCP" }}
         {{- end }}
         {{- end }}
-        {{- with .Values.env }}
+        {{- if or .Values.db.enabled .Values.env }}
         env:
+          {{- if .Values.db.enabled }}
+          - name: DB_TYPE
+            value: postgres
+          - name: DB_HOST
+            value: {{ printf "%s-rw" (include "cnp-generic-app.dbClusterName" .) }}
+          - name: DB_PORT
+            value: "5432"
+          - name: DB_NAME
+            value: {{ .Values.db.name | default .Values.app_name }}
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "cnp-generic-app.fullname" . }}-secrets
+                key: username
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ include "cnp-generic-app.fullname" . }}-secrets
+                key: password
+          {{- end }}
+          {{- with .Values.env }}
           {{- toYaml . | nindent 10 }}
+          {{- end }}
         {{- end }}
         envFrom:
           {{- if .Values.secrets.enabled }}

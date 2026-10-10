@@ -1,0 +1,62 @@
+{{- if and .Values.ingress.enabled .Values.ingress.sso_protected }}
+{{- $realm := default "3istor" .Values.ingress.realm }}
+{{- $issuer := .Values.ingress.oidc.issuer | default (printf "%s/realms/%s" .Values.ingress.oidc.baseURL $realm) }}
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: {{ include "cnp-generic-app.fullname" . }}-security
+  namespace: {{ .Release.Namespace }}
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: {{ include "cnp-generic-app.fullname" . }}-route
+  oidc:
+    provider:
+      {{- /*
+        The issuer string must be identical whether the token is validated by the
+        browser or by Envoy. The classic per-project Keycloak failure is Envoy
+        resolving an internal URL and then rejecting the iss claim, and it fails
+        at token validation rather than at deploy — so the public hostname is
+        pinned here and Envoy is given a cluster-local resolution path for the
+        same name. Never point this at a .svc address.
+      */}}
+      issuer: "{{ $issuer }}"
+      authorizationEndpoint: "{{ $issuer }}/protocol/openid-connect/auth"
+      tokenEndpoint: "{{ $issuer }}/protocol/openid-connect/token"
+    
+    clientID: "{{ .Values.ingress.oidc.clientID | default (printf "cnp-%s-%s" .Values.project_name .Values.app_name) }}"
+    
+    clientSecret:
+      name: {{ include "cnp-generic-app.fullname" . }}-secrets
+    
+    redirectURL: "https://{{ .Values.ingress.hostname }}/oauth2/callback"
+    logoutPath: "/logout"
+    {{- if .Values.ingress.allowedGroups }}
+    {{- /*
+      The OAuth2 filter runs before jwt_authn, so forwarding the access token
+      as a Bearer header is what lets the JWT provider below read the groups
+      claim: the token cookies themselves are encrypted.
+    */}}
+    forwardAccessToken: true
+  jwt:
+    providers:
+      - name: keycloak
+        issuer: "{{ $issuer }}"
+        remoteJWKS:
+          uri: "{{ $issuer }}/protocol/openid-connect/certs"
+  authorization:
+    defaultAction: Deny
+    rules:
+      - name: allowed-groups
+        action: Allow
+        principal:
+          jwt:
+            provider: keycloak
+            claims:
+              - name: groups
+                valueType: StringArray
+                values:
+                  {{- toYaml .Values.ingress.allowedGroups | nindent 18 }}
+    {{- end }}
+{{- end }}

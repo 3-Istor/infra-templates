@@ -1,0 +1,32 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "cnp-generic-app.fullname" . }}-route
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cnp-generic-app.labels" . | nindent 4 }}
+  annotations:
+    {{- if and .Values.monitoring.enabled .Values.project_name }}
+    gatus.3istor.com/{{ .Values.project_name }}-enabled: "true"
+    gatus.3istor.com/{{ .Values.project_name }}-endpoint: |
+      group: "Applications"
+      {{- if .Values.offhours.enabled }}
+      url: "http://offhours-guard.{{ .Values.project_name }}-system.svc.cluster.local:8082/health/{{ .Release.Namespace }}/{{ include "cnp-generic-app.fullname" . }}?port={{ (index .Values.service.ports 0).port }}&path={{ .Values.monitoring.path | default "/" }}"
+      {{- else }}
+      url: "https://{{ .Values.ingress.hostname }}{{ .Values.monitoring.path | default "/" }}"
+      {{- end }}
+      conditions:
+        - "[STATUS] == 200"
+    {{- end }}
+spec:
+  parentRefs:
+    - name: {{ .Values.ingress.gateway.name }}
+      namespace: {{ .Values.ingress.gateway.namespace }}
+  hostnames:
+    - {{ .Values.ingress.hostname | quote }}
+  rules:
+    - backendRefs:
+        - name: {{ include "cnp-generic-app.fullname" . }}
+          port: {{ (index .Values.service.ports 0).port | default 80 }}
+{{- end }}
