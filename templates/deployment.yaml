@@ -18,6 +18,9 @@ spec:
       labels:
         {{- include "cnp-generic-app.selectorLabels" . | nindent 8 }}
         tenant: {{ .Values.project_name | quote }}
+        {{- with .Values.logRetention }}
+        cnp.3istor.com/log-retention: {{ . | quote }}
+        {{- end }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
