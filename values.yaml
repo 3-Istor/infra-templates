@@ -315,6 +315,10 @@ monitoring:
   enabled: true
   path: "/"
 
+# How long Loki keeps this app's logs: 7d, 14d or 30d (default 14d). A
+# project-level logRetention, set on the namespace, wins over this one.
+logRetention: ""
+
 offhours:
   enabled: false
   sleepAt: "0 1 * * *"
