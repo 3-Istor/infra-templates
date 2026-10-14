@@ -1,0 +1,116 @@
+{{- $strategy := include "cnp-generic-app.releaseStrategy" . }}
+{{- if eq $strategy "canary" }}
+{{- $fullname := include "cnp-generic-app.fullname" . }}
+{{- $release := .Values.release }}
+{{- $preset := $release.preset | default "safe" }}
+{{- $port := (index .Values.service.ports 0).port | default 80 }}
+{{- $presets := dict
+  "safe" (list (dict "setWeight" 10) (dict "analysis" "2m") (dict "setWeight" 25) (dict "pause" "") (dict "setWeight" 50) (dict "analysis" "2m") (dict "setWeight" 100))
+  "fast" (list (dict "setWeight" 25) (dict "analysis" "1m") (dict "setWeight" 100))
+  "demo" (list (dict "setWeight" 10) (dict "analysis" "30s") (dict "setWeight" 50) (dict "pause" "10s") (dict "setWeight" 100))
+  "manual" (list (dict "setWeight" 10) (dict "pause" "") (dict "setWeight" 50) (dict "pause" "") (dict "setWeight" 100))
+}}
+{{- $args := list
+  (dict "name" "namespace" "value" .Release.Namespace)
+  (dict "name" "route" "value" (printf "%s-route" $fullname))
+  (dict "name" "rollout" "value" $fullname)
+  (dict "name" "canary-hash" "valueFrom" (dict "podTemplateHashValue" "Latest"))
+  (dict "name" "max-error-rate" "value" (divf (dig "analysis" "errorRateMax" 1 $release) 100 | toString))
+  (dict "name" "min-requests" "value" (dig "analysis" "minRequests" 50 $release | toString))
+  (dict "name" "smoke-url" "value" (printf "http://%s-canary.%s.svc:%v%s" $fullname .Release.Namespace $port (dig "smoke" "path" "/healthz" $release)))
+}}
+{{- range list "stable" "canary" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-{{ . }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "cnp-generic-app.labels" $ | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    {{- range $.Values.service.ports }}
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .targetPort }}
+      protocol: {{ .protocol | default "TCP" }}
+    {{- end }}
+  {{- /* Argo Rollouts adds the rollouts-pod-template-hash of each version. */}}
+  selector:
+    {{- include "cnp-generic-app.selectorLabels" $ | nindent 4 }}
+---
+{{- end }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ $fullname }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cnp-generic-app.labels" . | nindent 4 }}
+    project: {{ .Values.project_name | quote }}
+  annotations:
+    cnp.3istor.com/release-preset: {{ $preset | quote }}
+    cnp.3istor.com/release-allow-force: {{ $release.allowForce | default false | quote }}
+spec:
+  {{- if not (and .Values.autoscaling .Values.autoscaling.enabled) }}
+  replicas: {{ .Values.replicaCount | default 1 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "cnp-generic-app.selectorLabels" . | nindent 6 }}
+  workloadRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $fullname }}
+    scaleDown: progressively
+  strategy:
+    canary:
+      stableService: {{ $fullname }}-stable
+      canaryService: {{ $fullname }}-canary
+      trafficRouting:
+        plugins:
+          argoproj-labs/gatewayAPI:
+            httpRoute: {{ $fullname }}-route
+            namespace: {{ .Release.Namespace }}
+      steps:
+        {{- /*
+          With traffic routing the canary is sized from its weight, which is 0
+          until the first setWeight: without an explicit scale there is no pod
+          for the smoke test to reach. Sizing goes back to the weight right
+          after the first shift.
+        */}}
+        - setCanaryScale:
+            replicas: 1
+        - analysis:
+            templates:
+              - templateName: cnp-smoke
+                clusterScope: true
+            args:
+              {{- toYaml $args | nindent 14 }}
+        {{- range $index, $step := index $presets $preset }}
+        {{- if hasKey $step "setWeight" }}
+        - setWeight: {{ $step.setWeight }}
+        {{- if eq $index 0 }}
+        - setCanaryScale:
+            matchTrafficWeight: true
+        {{- end }}
+        {{- else if hasKey $step "pause" }}
+        {{- if $step.pause }}
+        - pause:
+            duration: {{ $step.pause }}
+        {{- else }}
+        - pause: {}
+        {{- end }}
+        {{- else }}
+        - analysis:
+            templates:
+              - templateName: cnp-error-rate
+                clusterScope: true
+            args:
+              {{- /* cnp-error-rate measures every 20s and Rollouts args are plain text, so the count is precomputed here. */}}
+              {{- $count := get (dict "2m" "6" "1m" "3" "30s" "2") $step.analysis }}
+              {{- toYaml (concat $args (list (dict "name" "duration" "value" $step.analysis) (dict "name" "count" "value" $count))) | nindent 14 }}
+        {{- end }}
+        {{- end }}
+{{- end }}

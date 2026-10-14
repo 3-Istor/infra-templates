@@ -19,6 +19,13 @@ jobs:
           helm lint .
           helm lint . -f tests/canary-values.yaml
 
+      - name: helm unittest
+        run: |
+          # Helm 4 refuses unsigned plugins without --verify=false, Helm 3 does not know the flag.
+          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.2.1 --verify=false \
+            || helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.2.1
+          helm unittest .
+
       - name: Install kubeconform
         run: |
           curl -sSLo /tmp/kubeconform.tar.gz \

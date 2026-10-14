@@ -26,7 +26,45 @@ spec:
   hostnames:
     - {{ .Values.ingress.hostname | quote }}
   rules:
+    {{- if include "cnp-generic-app.isCanary" . }}
+    {{- $fullname := include "cnp-generic-app.fullname" . }}
+    {{- $port := (index .Values.service.ports 0).port | default 80 }}
+    {{- $sticky := include "cnp-generic-app.isSticky" . }}
+    {{- /*
+      Argo Rollouts only rewrites the weights of the rule holding both the
+      stable and the canary backendRef. The cookie rules come first so a pinned
+      user never reaches the weighted split again.
+    */}}
+    {{- if $sticky }}
+    {{- range list "canary" "stable" }}
+    - matches:
+        - headers:
+            - type: RegularExpression
+              name: cookie
+              value: ".*cnp-track={{ . }}.*"
+      backendRefs:
+        - name: {{ $fullname }}-{{ . }}
+          port: {{ $port }}
+    {{- end }}
+    {{- end }}
+    - backendRefs:
+        {{- range list (list "stable" 100) (list "canary" 0) }}
+        {{- $track := index . 0 }}
+        - name: {{ $fullname }}-{{ $track }}
+          port: {{ $port }}
+          weight: {{ index . 1 }}
+          {{- if $sticky }}
+          filters:
+            - type: ResponseHeaderModifier
+              responseHeaderModifier:
+                add:
+                  - name: Set-Cookie
+                    value: "cnp-track={{ $track }}; Path=/; HttpOnly; SameSite=Lax"
+          {{- end }}
+        {{- end }}
+    {{- else }}
     - backendRefs:
         - name: {{ include "cnp-generic-app.fullname" . }}
           port: {{ (index .Values.service.ports 0).port | default 80 }}
+    {{- end }}
 {{- end }}

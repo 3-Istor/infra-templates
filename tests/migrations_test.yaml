@@ -1,0 +1,124 @@
+suite: migrations
+templates:
+  - templates/migrations.yaml
+release:
+  name: shop
+tests:
+  - it: renders nothing when migrations are disabled
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders only the PreSync Job when the app has no database
+    set:
+      migrations.enabled: true
+      migrations.command: ["/app/migrate"]
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Job
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/hook"]
+          value: PreSync
+      - equal:
+          path: spec.backoffLimit
+          value: 0
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 300
+
+  - it: skips the backup when the database has no backup bucket
+    set:
+      db.enabled: true
+      migrations.enabled: true
+      migrations.command: ["/app/migrate"]
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Job
+
+  - it: takes a CNPG backup in an earlier wave than the migration
+    set:
+      db.enabled: true
+      db.backup.enabled: true
+      image.tag: "1.4.0"
+      migrations.enabled: true
+      migrations.command: ["/app/migrate"]
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: Backup
+        documentIndex: 0
+      - equal:
+          path: spec.method
+          value: plugin
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "-1"
+        documentIndex: 0
+      - matchRegex:
+          path: metadata.name
+          pattern: ^shop-db-pre-[0-9a-f]{8}$
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "0"
+        documentIndex: 1
+
+  - it: gives the Job the same database credentials as the app
+    set:
+      db.enabled: true
+      migrations.enabled: true
+      migrations.command: ["/app/migrate"]
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DB_HOST
+            value: shop-db-rw
+
+  - it: converts an hour timeout to seconds
+    set:
+      migrations.enabled: true
+      migrations.command: ["/app/migrate"]
+      migrations.timeout: 1h
+    asserts:
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 3600
+
+  - it: refuses a malformed timeout
+    set:
+      migrations.enabled: true
+      migrations.command: ["/app/migrate"]
+      migrations.timeout: 5 minutes
+    asserts:
+      - failedTemplate:
+          errorPattern: must be a number followed by s, m or h
+
+  - it: refuses migrations without a command
+    set:
+      migrations.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: migrations.command is the migration entrypoint
+
+  - it: refuses a canary with a database but no migrations
+    set:
+      db.enabled: true
+      release.strategy: canary
+    asserts:
+      - failedTemplate:
+          errorPattern: needs migrations.enabled
+
+  - it: allows a rolling app with a database and no migrations
+    set:
+      db.enabled: true
+      release.strategy: rolling
+    asserts:
+      - hasDocuments:
+          count: 0
