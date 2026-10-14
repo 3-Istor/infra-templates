@@ -126,6 +126,46 @@ db:
     targetTime: ""
 
 # -----------------------------------------------------------------------------
+# Database migrations (CNP migration standard v1)
+# -----------------------------------------------------------------------------
+# Runs command from the app image as an Argo CD PreSync Job, so the schema is
+# migrated before any new pod starts and a failed migration stops the sync with
+# the running version untouched. Migrations must stay compatible with the
+# previous release (expand/contract): old and new pods share the database.
+migrations:
+  enabled: false
+  command: []
+  # Takes an on-demand CNPG backup first. Only applies with db.backup.enabled:
+  # without a bucket there is nothing to back up to.
+  backupBefore: true
+  # Accepts s, m or h. Becomes the Job's activeDeadlineSeconds.
+  timeout: 5m
+  # Empty reuses the app's resources.
+  resources: {}
+
+# -----------------------------------------------------------------------------
+# Progressive delivery (CNP Release)
+# -----------------------------------------------------------------------------
+# rolling keeps the plain Deployment rollout. canary hands the Deployment's pods
+# to an Argo Rollout (workloadRef) that shifts the HTTPRoute weights step by
+# step, gated by a smoke test and an error-rate analysis run against the
+# platform's ClusterAnalysisTemplates. With a database, canary needs
+# migrations.enabled: two versions share the schema for the whole release.
+release:
+  strategy: rolling          # rolling | canary | bluegreen (not supported yet)
+  preset: safe               # safe | fast | demo | manual
+  # cookie pins each user to the version that served them first, so nobody
+  # flips between versions mid-session. Both versions must set the cookie:
+  # with a canary-only cookie, stable users are re-rolled on every request.
+  stickiness: cookie         # none | cookie
+  smoke:
+    path: /healthz           # GET against the canary Service before any traffic, expects 2xx
+  analysis:
+    errorRateMax: 1          # percent of canary requests in error
+    minRequests: 50          # fewer requests in the window is inconclusive, not a pass
+  allowForce: true
+
+# -----------------------------------------------------------------------------
 # Pod Annotations et Labels
 # -----------------------------------------------------------------------------
 podAnnotations: {}

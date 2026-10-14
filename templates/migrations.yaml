@@ -1,0 +1,89 @@
+{{- $strategy := dig "strategy" "rolling" (.Values.release | default dict) }}
+{{- if and .Values.db.enabled (ne $strategy "rolling") (not .Values.migrations.enabled) }}
+{{- fail (printf "release.strategy %q runs two versions against one database for minutes: it needs migrations.enabled, so the schema is migrated once, before the new version starts" $strategy) }}
+{{- end }}
+{{- if .Values.migrations.enabled }}
+{{- $command := .Values.migrations.command }}
+{{- if not $command }}
+{{- fail "migrations.command is the migration entrypoint of the app image, e.g. [\"/app/migrate\"]" }}
+{{- end }}
+{{- $timeout := .Values.migrations.timeout | default "5m" | toString }}
+{{- if not (regexMatch "^[0-9]+[smh]$" $timeout) }}
+{{- fail (printf "migrations.timeout %q must be a number followed by s, m or h" $timeout) }}
+{{- end }}
+{{- $amount := trimSuffix "s" (trimSuffix "m" (trimSuffix "h" $timeout)) | int }}
+{{- $deadline := ternary (mul $amount 3600) (ternary (mul $amount 60) $amount (hasSuffix "m" $timeout)) (hasSuffix "h" $timeout) }}
+{{- if and .Values.migrations.backupBefore .Values.db.enabled .Values.db.backup.enabled }}
+{{- $base := include "cnp-generic-app.dbBaseName" . }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Backup
+metadata:
+  {{- /*
+    Named after the image tag: re-syncing the same version replaces its own
+    backup record (BeforeHookCreation), while each release keeps a distinct one
+    that the CMP can point to. 50 + 5 + 8 stays within 63.
+  */}}
+  name: {{ printf "%s-pre-%s" $base (.Values.image.tag | default .Chart.AppVersion | toString | sha256sum | trunc 8) }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cnp-generic-app.labels" . | nindent 4 }}
+    cnp.3istor.com/backup-reason: pre-migration
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    {{- /* Argo CD only waits for it with the Backup health check in argocd-cm. */}}
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  cluster:
+    name: {{ include "cnp-generic-app.dbClusterName" . }}
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+---
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "cnp-generic-app.fullname" . | trunc 55 | trimSuffix "-" }}-migrate
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cnp-generic-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  {{- /* A half-applied migration retried blindly can make things worse. */}}
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ $deadline }}
+  template:
+    metadata:
+      labels:
+        tenant: {{ .Values.project_name | quote }}
+        cnp.3istor.com/role: migration
+    spec:
+      restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: migrate
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+        command:
+          {{- toYaml $command | nindent 10 }}
+        {{- include "cnp-generic-app.containerEnv" . | trim | nindent 8 }}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        {{- with (.Values.migrations.resources | default .Values.resources) }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+{{- end }}

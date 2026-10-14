@@ -75,3 +75,83 @@ Selector labels
 app.kubernetes.io/name: {{ include "cnp-generic-app.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
+
+{{/*
+Env and envFrom shared by the app container and the migration Job, so both
+see the same database and secrets.
+*/}}
+{{- define "cnp-generic-app.containerEnv" -}}
+{{- if or .Values.db.enabled .Values.env }}
+env:
+  {{- if .Values.db.enabled }}
+  - name: DB_TYPE
+    value: postgres
+  - name: DB_HOST
+    value: {{ printf "%s-rw" (include "cnp-generic-app.dbClusterName" .) }}
+  - name: DB_PORT
+    value: "5432"
+  - name: DB_NAME
+    value: {{ .Values.db.name | default .Values.app_name }}
+  - name: DB_USER
+    valueFrom:
+      secretKeyRef:
+        name: {{ include "cnp-generic-app.fullname" . }}-secrets
+        key: username
+  - name: DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: {{ include "cnp-generic-app.fullname" . }}-secrets
+        key: password
+  {{- end }}
+  {{- with .Values.env }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}
+envFrom:
+  {{- if .Values.secrets.enabled }}
+  - secretRef:
+      name: {{ include "cnp-generic-app.fullname" . }}-secrets
+  {{- end }}
+  {{- with .Values.envFrom }}
+    {{- toYaml . | nindent 2 }}
+  {{- end }}
+{{- end }}
+
+{{/*
+Validated release strategy. Every template that changes shape with the
+strategy goes through this, so a typo fails the render instead of silently
+falling back to a rolling update.
+*/}}
+{{- define "cnp-generic-app.releaseStrategy" -}}
+{{- $release := .Values.release | default dict }}
+{{- $strategy := $release.strategy | default "rolling" }}
+{{- $preset := $release.preset | default "safe" }}
+{{- $stickiness := $release.stickiness | default "cookie" }}
+{{- if not (has $strategy (list "rolling" "canary" "bluegreen")) }}
+{{- fail (printf "release.strategy %q is not one of rolling, canary, bluegreen" $strategy) }}
+{{- end }}
+{{- if not (has $preset (list "safe" "fast" "demo" "manual")) }}
+{{- fail (printf "release.preset %q is not one of safe, fast, demo, manual" $preset) }}
+{{- end }}
+{{- if not (has $stickiness (list "none" "cookie")) }}
+{{- fail (printf "release.stickiness %q is not one of none, cookie" $stickiness) }}
+{{- end }}
+{{- if eq $strategy "bluegreen" }}
+{{- fail "release.strategy \"bluegreen\" is not supported yet: use canary or rolling" }}
+{{- end }}
+{{- if and (eq $strategy "canary") (not .Values.ingress.enabled) }}
+{{- fail "release.strategy \"canary\" shifts traffic through the app's HTTPRoute: it needs ingress.enabled" }}
+{{- end }}
+{{- if and (eq $strategy "canary") (not .Values.service.enabled) }}
+{{- fail "release.strategy \"canary\" routes to the -stable and -canary Services: it needs service.enabled" }}
+{{- end }}
+{{- $strategy }}
+{{- end }}
+
+{{- define "cnp-generic-app.isCanary" -}}
+{{- if eq (include "cnp-generic-app.releaseStrategy" .) "canary" }}true{{ end }}
+{{- end }}
+
+{{- define "cnp-generic-app.isSticky" -}}
+{{- if and (include "cnp-generic-app.isCanary" .) (eq (dig "stickiness" "cookie" (.Values.release | default dict)) "cookie") }}true{{ end }}
+{{- end }}

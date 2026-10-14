@@ -1,0 +1,482 @@
+suite: release
+templates:
+  - templates/rollout.yaml
+  - templates/httproute.yaml
+  - templates/deployment.yaml
+  - templates/securitypolicy.yaml
+release:
+  name: shop
+  namespace: shop-ns
+set:
+  fullnameOverride: web
+  project_name: shop
+  ingress.enabled: true
+  ingress.hostname: web.example.com
+  replicaCount: 4
+tests:
+  - it: renders no Rollout for a rolling app
+    template: templates/rollout.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: keeps the single-backend route for a rolling app
+    template: templates/httproute.yaml
+    asserts:
+      - equal:
+          path: spec.rules
+          value:
+            - backendRefs:
+                - name: web
+                  port: 8000
+
+  - it: keeps the Deployment replicas for a rolling app
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 4
+
+  - it: hands the Deployment to a Rollout through workloadRef under canary
+    template: templates/rollout.yaml
+    set:
+      release.strategy: canary
+    asserts:
+      - hasDocuments:
+          count: 3
+      - isKind:
+          of: Rollout
+        documentIndex: 2
+      - equal:
+          path: spec.workloadRef
+          value:
+            apiVersion: apps/v1
+            kind: Deployment
+            name: web
+            scaleDown: progressively
+        documentIndex: 2
+      - equal:
+          path: spec.replicas
+          value: 4
+        documentIndex: 2
+
+  - it: points the gatewayAPI plugin at the app's HTTPRoute
+    template: templates/rollout.yaml
+    set:
+      release.strategy: canary
+    asserts:
+      - equal:
+          path: spec.strategy.canary.trafficRouting.plugins["argoproj-labs/gatewayAPI"]
+          value:
+            httpRoute: web-route
+            namespace: shop-ns
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.stableService
+          value: web-stable
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.canaryService
+          value: web-canary
+        documentIndex: 2
+
+  - it: renders the stable and canary Services with the app's ports
+    template: templates/rollout.yaml
+    set:
+      release.strategy: canary
+    asserts:
+      - isKind:
+          of: Service
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: web-stable
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: web-canary
+        documentIndex: 1
+      - equal:
+          path: spec.ports[0].port
+          value: 8000
+        documentIndex: 1
+
+  - it: leaves replicas to the Rollout under canary
+    template: templates/deployment.yaml
+    set:
+      release.strategy: canary
+    asserts:
+      - notExists:
+          path: spec.replicas
+
+  - it: leaves replicas to the autoscaler on the Rollout when autoscaling is on
+    template: templates/rollout.yaml
+    set:
+      release.strategy: canary
+      autoscaling.enabled: true
+    asserts:
+      - notExists:
+          path: spec.replicas
+        documentIndex: 2
+
+  - it: starts the canary route at 100/0 between stable and canary
+    template: templates/httproute.yaml
+    set:
+      release.strategy: canary
+    asserts:
+      - equal:
+          path: spec.rules[2].backendRefs[0].name
+          value: web-stable
+      - equal:
+          path: spec.rules[2].backendRefs[0].weight
+          value: 100
+      - equal:
+          path: spec.rules[2].backendRefs[1].name
+          value: web-canary
+      - equal:
+          path: spec.rules[2].backendRefs[1].weight
+          value: 0
+
+  - it: pins users to a version with cookie rules before the weighted rule
+    template: templates/httproute.yaml
+    set:
+      release.strategy: canary
+    asserts:
+      - lengthEqual:
+          path: spec.rules
+          count: 3
+      - equal:
+          path: spec.rules[0]
+          value:
+            matches:
+              - headers:
+                  - type: RegularExpression
+                    name: cookie
+                    value: .*cnp-track=canary.*
+            backendRefs:
+              - name: web-canary
+                port: 8000
+      - equal:
+          path: spec.rules[1].matches[0].headers[0].value
+          value: .*cnp-track=stable.*
+      - equal:
+          path: spec.rules[1].backendRefs[0].name
+          value: web-stable
+
+  - it: sets the track cookie on both backends, not only the canary
+    template: templates/httproute.yaml
+    set:
+      release.strategy: canary
+    asserts:
+      - equal:
+          path: spec.rules[2].backendRefs[0].filters[0].responseHeaderModifier.add[0]
+          value:
+            name: Set-Cookie
+            value: cnp-track=stable; Path=/; HttpOnly; SameSite=Lax
+      - equal:
+          path: spec.rules[2].backendRefs[1].filters[0].responseHeaderModifier.add[0]
+          value:
+            name: Set-Cookie
+            value: cnp-track=canary; Path=/; HttpOnly; SameSite=Lax
+
+  - it: renders only the weighted rule without stickiness
+    template: templates/httproute.yaml
+    set:
+      release.strategy: canary
+      release.stickiness: none
+    asserts:
+      - equal:
+          path: spec.rules
+          value:
+            - backendRefs:
+                - name: web-stable
+                  port: 8000
+                  weight: 100
+                - name: web-canary
+                  port: 8000
+                  weight: 0
+
+  - it: keeps the SSO policy on the route under canary
+    template: templates/securitypolicy.yaml
+    set:
+      release.strategy: canary
+      ingress.sso_protected: true
+    asserts:
+      - equal:
+          path: spec.targetRefs[0].name
+          value: web-route
+
+  - it: smoke-tests a scaled canary before any traffic shift
+    template: templates/rollout.yaml
+    set:
+      release.strategy: canary
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[0]
+          value:
+            setCanaryScale:
+              replicas: 1
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[1].analysis.templates
+          value:
+            - templateName: cnp-smoke
+              clusterScope: true
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[3]
+          value:
+            setCanaryScale:
+              matchTrafficWeight: true
+        documentIndex: 2
+
+  - it: passes the contract args to the analysis runs
+    template: templates/rollout.yaml
+    set:
+      release.strategy: canary
+      release.smoke.path: /ready
+      release.analysis.errorRateMax: 5
+      release.analysis.minRequests: 20
+    asserts:
+      - equal:
+          path: spec.strategy.canary.steps[1].analysis.args
+          value:
+            - name: namespace
+              value: shop-ns
+            - name: route
+              value: web-route
+            - name: rollout
+              value: web
+            - name: canary-hash
+              valueFrom:
+                podTemplateHashValue: Latest
+            - name: max-error-rate
+              value: "0.05"
+            - name: min-requests
+              value: "20"
+            - name: smoke-url
+              value: http://web-canary.shop-ns.svc:8000/ready
+        documentIndex: 2
+
+  - it: renders the safe preset steps
+    template: templates/rollout.yaml
+    set:
+      release.strategy: canary
+    asserts:
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 10
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[2].setWeight
+          value: 10
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[4].analysis.templates[0].templateName
+          value: cnp-error-rate
+        documentIndex: 2
+      - contains:
+          path: spec.strategy.canary.steps[4].analysis.args
+          content:
+            name: duration
+            value: 2m
+        documentIndex: 2
+      - contains:
+          path: spec.strategy.canary.steps[4].analysis.args
+          content:
+            name: count
+            value: "6"
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[5].setWeight
+          value: 25
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[6].pause
+          value: {}
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[7].setWeight
+          value: 50
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[8].analysis.templates[0].templateName
+          value: cnp-error-rate
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[9].setWeight
+          value: 100
+        documentIndex: 2
+
+  - it: renders the fast preset steps
+    template: templates/rollout.yaml
+    set:
+      release.strategy: canary
+      release.preset: fast
+    asserts:
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 6
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[2].setWeight
+          value: 25
+        documentIndex: 2
+      - contains:
+          path: spec.strategy.canary.steps[4].analysis.args
+          content:
+            name: duration
+            value: 1m
+        documentIndex: 2
+      - contains:
+          path: spec.strategy.canary.steps[4].analysis.args
+          content:
+            name: count
+            value: "3"
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[5].setWeight
+          value: 100
+        documentIndex: 2
+
+  - it: renders the demo preset steps
+    template: templates/rollout.yaml
+    set:
+      release.strategy: canary
+      release.preset: demo
+    asserts:
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 8
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[2].setWeight
+          value: 10
+        documentIndex: 2
+      - contains:
+          path: spec.strategy.canary.steps[4].analysis.args
+          content:
+            name: duration
+            value: 30s
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[5].setWeight
+          value: 50
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[6].pause
+          value:
+            duration: 10s
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[7].setWeight
+          value: 100
+        documentIndex: 2
+
+  - it: renders the manual preset steps without error-rate analysis
+    template: templates/rollout.yaml
+    set:
+      release.strategy: canary
+      release.preset: manual
+    asserts:
+      - lengthEqual:
+          path: spec.strategy.canary.steps
+          count: 8
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[2]
+          value:
+            setWeight: 10
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[3]
+          value:
+            setCanaryScale:
+                matchTrafficWeight: true
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[4]
+          value:
+            pause: {}
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[5]
+          value:
+            setWeight: 50
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[6]
+          value:
+            pause: {}
+        documentIndex: 2
+      - equal:
+          path: spec.strategy.canary.steps[7]
+          value:
+            setWeight: 100
+        documentIndex: 2
+
+  - it: refuses an unknown strategy
+    template: templates/rollout.yaml
+    set:
+      release.strategy: blue-green
+    asserts:
+      - failedTemplate:
+          errorPattern: release.strategy "blue-green" is not one of
+
+  - it: refuses bluegreen until it is supported
+    template: templates/rollout.yaml
+    set:
+      release.strategy: bluegreen
+    asserts:
+      - failedTemplate:
+          errorPattern: is not supported yet
+
+  - it: refuses an unknown preset
+    template: templates/rollout.yaml
+    set:
+      release.preset: yolo
+    asserts:
+      - failedTemplate:
+          errorPattern: release.preset "yolo" is not one of
+
+  - it: refuses an unknown stickiness
+    template: templates/rollout.yaml
+    set:
+      release.stickiness: header
+    asserts:
+      - failedTemplate:
+          errorPattern: release.stickiness "header" is not one of
+
+  - it: refuses a canary without an HTTPRoute
+    template: templates/rollout.yaml
+    set:
+      release.strategy: canary
+      ingress.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: it needs ingress.enabled
+
+  - it: refuses a canary without a Service
+    template: templates/rollout.yaml
+    set:
+      release.strategy: canary
+      service.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: it needs service.enabled
+
+  - it: adds a readiness probe on the smoke path only under canary
+    template: templates/deployment.yaml
+    set:
+      release.strategy: canary
+      release.smoke.path: /up
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /up
+
+  - it: renders no probe for a rolling app
+    template: templates/deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe

@@ -7,7 +7,8 @@ metadata:
     {{- include "cnp-generic-app.labels" . | nindent 4 }}
     project: {{ .Values.project_name | quote }}
 spec:
-  {{- if not (and .Values.autoscaling .Values.autoscaling.enabled) }}
+  {{- /* Under canary the Rollout owns the pods and scales this Deployment to 0. */}}
+  {{- if not (or (and .Values.autoscaling .Values.autoscaling.enabled) (include "cnp-generic-app.isCanary" .)) }}
   replicas: {{ .Values.replicaCount | default 1 }}
   {{- end }}
   selector:
@@ -38,40 +39,21 @@ spec:
           protocol: {{ .protocol | default "TCP" }}
         {{- end }}
         {{- end }}
-        {{- if or .Values.db.enabled .Values.env }}
-        env:
-          {{- if .Values.db.enabled }}
-          - name: DB_TYPE
-            value: postgres
-          - name: DB_HOST
-            value: {{ printf "%s-rw" (include "cnp-generic-app.dbClusterName" .) }}
-          - name: DB_PORT
-            value: "5432"
-          - name: DB_NAME
-            value: {{ .Values.db.name | default .Values.app_name }}
-          - name: DB_USER
-            valueFrom:
-              secretKeyRef:
-                name: {{ include "cnp-generic-app.fullname" . }}-secrets
-                key: username
-          - name: DB_PASSWORD
-            valueFrom:
-              secretKeyRef:
-                name: {{ include "cnp-generic-app.fullname" . }}-secrets
-                key: password
-          {{- end }}
-          {{- with .Values.env }}
-          {{- toYaml . | nindent 10 }}
-          {{- end }}
+        {{- include "cnp-generic-app.containerEnv" . | trim | nindent 8 }}
+        {{- /*
+          Only under canary: the probe values in values.yaml were never rendered,
+          and turning them on for every app would fail apps that do not serve
+          /ready. A canary needs it, or its pods take traffic before the app is up.
+        */}}
+        {{- if eq (include "cnp-generic-app.releaseStrategy" .) "canary" }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.release.smoke.path | default "/healthz" }}
+            port: {{ (first .Values.service.ports).targetPort }}
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
         {{- end }}
-        envFrom:
-          {{- if .Values.secrets.enabled }}
-          - secretRef:
-              name: {{ include "cnp-generic-app.fullname" . }}-secrets
-          {{- end }}
-          {{- with .Values.envFrom }}
-            {{- toYaml . | nindent 10 }}
-          {{- end }}
         {{- with .Values.resources }}
         resources:
           {{- toYaml . | nindent 10 }}
