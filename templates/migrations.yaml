@@ -29,10 +29,10 @@ metadata:
     {{- include "cnp-generic-app.labels" . | nindent 4 }}
     cnp.3istor.com/backup-reason: pre-migration
   annotations:
-    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
     {{- /* Argo CD only waits for it with the Backup health check in argocd-cm. */}}
-    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/sync-wave: "-2"
 spec:
   cluster:
     name: {{ include "cnp-generic-app.dbClusterName" . }}
@@ -49,9 +49,17 @@ metadata:
   labels:
     {{- include "cnp-generic-app.labels" . | nindent 4 }}
   annotations:
-    argocd.argoproj.io/hook: PreSync
+    {{- /*
+      Sync hooks ordered by wave, not PreSync: on an app's first sync a
+      PreSync Job runs before the database and its credentials exist, fails
+      (backoffLimit 0) and the app never syncs. Order: secrets -4, Cluster -3
+      (Argo CD waits for it with the Cluster health check in argocd-cm),
+      backup -2, this Job -1, then the workloads at 0, so a failed migration
+      still stops the sync before the new version starts.
+    */}}
+    argocd.argoproj.io/hook: Sync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
-    argocd.argoproj.io/sync-wave: "0"
+    argocd.argoproj.io/sync-wave: "-1"
 spec:
   {{- /* A half-applied migration retried blindly can make things worse. */}}
   backoffLimit: 0

@@ -20,6 +20,9 @@ metadata:
   */}}
   name: {{ include "cnp-generic-app.dbClusterName" . }}
   namespace: {{ .Release.Namespace }}
+  annotations:
+    {{- /* Healthy before the backup and migration hooks run (see migrations.yaml). */}}
+    argocd.argoproj.io/sync-wave: "-3"
 spec:
   instances: {{ .Values.db.instances }}
   {{- with .Values.db.imageName }}
