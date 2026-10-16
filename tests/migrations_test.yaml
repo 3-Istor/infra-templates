@@ -9,7 +9,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: renders only the PreSync Job when the app has no database
+  - it: renders only the migration Job, as a Sync hook, when the app has no database
     set:
       migrations.enabled: true
       migrations.command: ["/app/migrate"]
@@ -20,7 +20,7 @@ tests:
           of: Job
       - equal:
           path: metadata.annotations["argocd.argoproj.io/hook"]
-          value: PreSync
+          value: Sync
       - equal:
           path: spec.backoffLimit
           value: 0
@@ -58,7 +58,11 @@ tests:
         documentIndex: 0
       - equal:
           path: metadata.annotations["argocd.argoproj.io/sync-wave"]
-          value: "-1"
+          value: "-2"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/hook"]
+          value: Sync
         documentIndex: 0
       - matchRegex:
           path: metadata.name
@@ -66,7 +70,7 @@ tests:
         documentIndex: 0
       - equal:
           path: metadata.annotations["argocd.argoproj.io/sync-wave"]
-          value: "0"
+          value: "-1"
         documentIndex: 1
 
   - it: gives the Job the same database credentials as the app
