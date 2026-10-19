@@ -1,0 +1,73 @@
+suite: environment
+templates:
+  - templates/deployment.yaml
+  - templates/rollout.yaml
+  - templates/cnpg-cluster.yaml
+  - templates/service.yaml
+release:
+  name: shop-a-very-long-application-name-backend-stg
+  namespace: shop-a-very-long-application-name-stg
+set:
+  project_name: shop
+  app_name: a-very-long-application-name
+  ingress.enabled: true
+  ingress.hostname: web.example.com
+  db.enabled: true
+tests:
+  - it: leaves prod objects without an environment label
+    release:
+      name: shop-web-backend
+    template: templates/deployment.yaml
+    asserts:
+      - notExists:
+          path: metadata.labels["cnp.3istor.com/env"]
+
+  - it: labels staging objects with their environment
+    set:
+      environment: staging
+    template: templates/deployment.yaml
+    asserts:
+      - equal:
+          path: metadata.labels["cnp.3istor.com/env"]
+          value: staging
+
+  - it: keeps the staging suffix when the database name is truncated
+    set:
+      environment: staging
+    template: templates/cnpg-cluster.yaml
+    documentSelector:
+      path: kind
+      value: Cluster
+    asserts:
+      - equal:
+          path: metadata.name
+          value: shop-a-very-long-application-name-backend-stg-db
+
+  - it: names the prod database exactly as before
+    release:
+      name: shop-a-very-long-application-name-backend-and-more
+    template: templates/cnpg-cluster.yaml
+    documentSelector:
+      path: kind
+      value: Cluster
+    asserts:
+      - equal:
+          path: metadata.name
+          value: shop-a-very-long-application-name-backend-and-m-db
+
+  - it: never runs a canary in staging
+    set:
+      environment: staging
+      release.strategy: canary
+    template: templates/rollout.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses an unknown environment
+    set:
+      environment: dev
+    template: templates/service.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: environment "dev" is not one of prod, staging

@@ -6,6 +6,12 @@
 project_name: ""
 app_name: ""
 
+# prod or staging. Set by the app's deploy/env/staging/<component>.yaml, never
+# for prod: prod renders exactly as it did before environments existed. Staging
+# adds the cnp.3istor.com/env label, keeps its database names apart from prod
+# and always uses a rolling update.
+environment: prod
+
 # -----------------------------------------------------------------------------
 # Application Configuration
 # -----------------------------------------------------------------------------
