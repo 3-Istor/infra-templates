@@ -27,7 +27,33 @@ fullname): capped at 50 chars total, so truncate the release name to 47 and
 append "-db" rather than the chart-name-bearing fullname.
 */}}
 {{- define "cnp-generic-app.dbBaseName" -}}
-{{- printf "%s-db" (.Release.Name | trunc 47 | trimSuffix "-") }}
+{{- printf "%s-db" (include "cnp-generic-app.dbStem" (dict "ctx" . "max" 47)) }}
+{{- end }}
+
+{{/*
+The release name cut to max characters, keeping the environment suffix.
+Truncating "<app>-stg" as a whole could drop the suffix and give a staging
+database the name, and the backup bucket, of the prod one.
+*/}}
+{{- define "cnp-generic-app.dbStem" -}}
+{{- $ctx := .ctx }}
+{{- if eq (include "cnp-generic-app.environment" $ctx) "prod" }}
+{{- $ctx.Release.Name | trunc (int .max) | trimSuffix "-" }}
+{{- else }}
+{{- printf "%s-stg" ($ctx.Release.Name | trimSuffix "-stg" | trunc (sub (int .max) 4 | int) | trimSuffix "-") }}
+{{- end }}
+{{- end }}
+
+{{/*
+Validated environment. Staging is the only other value: it changes names, not
+behaviour, except that it never runs a canary (see releaseStrategy).
+*/}}
+{{- define "cnp-generic-app.environment" -}}
+{{- $env := .Values.environment | default "prod" }}
+{{- if not (has $env (list "prod" "staging")) }}
+{{- fail (printf "environment %q is not one of prod, staging" $env) }}
+{{- end }}
+{{- $env }}
 {{- end }}
 
 {{/*
@@ -40,7 +66,7 @@ generation's backups stay in one place.
 {{- $generation := int (dig "restore" "generation" 0 .Values.db) }}
 {{- if gt $generation 0 }}
 {{- $suffix := printf "-db-r%d" $generation }}
-{{- printf "%s%s" (.Release.Name | trunc (sub 50 (len $suffix) | int) | trimSuffix "-") $suffix }}
+{{- printf "%s%s" (include "cnp-generic-app.dbStem" (dict "ctx" . "max" (sub 50 (len $suffix)))) $suffix }}
 {{- else }}
 {{- include "cnp-generic-app.dbBaseName" . }}
 {{- end }}
@@ -63,6 +89,11 @@ helm.sh/chart: {{ include "cnp-generic-app.chart" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- /* Prod objects stay unlabelled so lighting up staging changes nothing in prod. */}}
+{{- $env := include "cnp-generic-app.environment" . }}
+{{- if ne $env "prod" }}
+cnp.3istor.com/env: {{ $env }}
+{{- end }}
 {{- if .Values.commonLabels }}
 {{- toYaml .Values.commonLabels }}
 {{- end }}
@@ -125,6 +156,13 @@ falling back to a rolling update.
 {{- define "cnp-generic-app.releaseStrategy" -}}
 {{- $release := .Values.release | default dict }}
 {{- $strategy := $release.strategy | default "rolling" }}
+{{- /*
+  The release block is shared by both environments, but a canary needs real
+  traffic to measure: staging always rolls.
+*/}}
+{{- if ne (include "cnp-generic-app.environment" .) "prod" }}
+{{- $strategy = "rolling" }}
+{{- end }}
 {{- $preset := $release.preset | default "safe" }}
 {{- $stickiness := $release.stickiness | default "cookie" }}
 {{- if not (has $strategy (list "rolling" "canary" "bluegreen")) }}
