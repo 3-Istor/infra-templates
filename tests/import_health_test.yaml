@@ -1,0 +1,40 @@
+suite: import health probes
+templates:
+  - templates/deployment.yaml
+release:
+  name: joetest-session-manager-app
+  namespace: joetest-session-manager
+set:
+  project_name: joetest
+  app_name: session-manager
+tests:
+  - it: preserves legacy rolling deployments without probes
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe
+      - notExists:
+          path: spec.template.spec.containers[0].startupProbe
+
+  - it: uses the selected HTTP endpoint for imported images
+    set:
+      importHealth.enabled: true
+      importHealth.startup:
+        httpGet: {path: /api/health, port: 8000}
+        periodSeconds: 2
+        failureThreshold: 30
+      importHealth.readiness:
+        httpGet: {path: /api/health, port: 8000}
+        periodSeconds: 5
+      importHealth.liveness:
+        httpGet: {path: /api/health, port: 8000}
+        periodSeconds: 10
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet
+          value: {path: /api/health, port: 8000}
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 30
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+          value: {path: /api/health, port: 8000}

@@ -53,6 +53,13 @@ spec:
           periodSeconds: 5
           timeoutSeconds: 3
           failureThreshold: 3
+        {{- else if (dig "enabled" false (.Values.importHealth | default dict)) }}
+        startupProbe:
+          {{- toYaml .Values.importHealth.startup | nindent 10 }}
+        readinessProbe:
+          {{- toYaml .Values.importHealth.readiness | nindent 10 }}
+        livenessProbe:
+          {{- toYaml .Values.importHealth.liveness | nindent 10 }}
         {{- end }}
         {{- with .Values.resources }}
         resources:

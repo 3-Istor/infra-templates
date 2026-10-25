@@ -370,3 +370,10 @@ offhours:
   sleepAt: "0 1 * * *"
   wakeAt: "0 7 * * *" 
   timezone: "Europe/Paris"
+# Opt-in health probes for centrally validated repository imports.
+# Legacy catalog deployments keep their current probe behavior.
+importHealth:
+  enabled: false
+  startup: {}
+  readiness: {}
+  liveness: {}
