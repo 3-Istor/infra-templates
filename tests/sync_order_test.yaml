@@ -1,16 +1,18 @@
-# A new app's first sync: credentials, then a Ready database, then the backup
+# A new app's first sync: credentials and the backup bucket, then a Ready database, then the backup
 # and migration hooks (migrations_test.yaml: -2, -1), then the workloads at 0.
 suite: sync order
 templates:
   - templates/vaultsecret.yaml
   - templates/registry-secret.yaml
   - templates/cnpg-cluster.yaml
+  - templates/cnpg-backup.yaml
 release:
   name: shop
 set:
   secrets.enabled: true
   secrets.vaultPath: project-p/shop
   db.enabled: true
+  db.backup.enabled: true
 tests:
   - it: syncs the app's Vault secrets first
     template: templates/vaultsecret.yaml
@@ -32,3 +34,23 @@ tests:
       - equal:
           path: metadata.annotations["argocd.argoproj.io/sync-wave"]
           value: "-3"
+
+  - it: creates the backup bucket before the ObjectStore and the pre-migration Backup
+    template: templates/cnpg-backup.yaml
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: ObjectBucketClaim
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "-5"
+
+  - it: creates the ObjectStore before the database and the pre-migration Backup
+    template: templates/cnpg-backup.yaml
+    documentIndex: 1
+    asserts:
+      - isKind:
+          of: ObjectStore
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "-4"

@@ -7,6 +7,9 @@ kind: ObjectBucketClaim
 metadata:
   name: {{ $base }}-backup
   namespace: {{ .Release.Namespace }}
+  annotations:
+    # Before the pre-migration Backup hook (-2), or the sync never reaches wave 0.
+    argocd.argoproj.io/sync-wave: "-5"
 spec:
   bucketName: {{ $bucket }}
   storageClassName: {{ ternary "ceph-bucket-retain" "ceph-bucket" .Values.db.backup.keepAfterDelete }}
@@ -16,6 +19,8 @@ kind: ObjectStore
 metadata:
   name: {{ $base }}-backup
   namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-4"
 spec:
   retentionPolicy: {{ .Values.db.backup.retentionPolicy | quote }}
   configuration:
