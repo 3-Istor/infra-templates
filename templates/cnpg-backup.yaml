@@ -42,7 +42,8 @@ spec:
 apiVersion: postgresql.cnpg.io/v1
 kind: ScheduledBackup
 metadata:
-  name: {{ $base }}-daily
+  # Per generation: spec.cluster is immutable, a restore needs a new object.
+  name: {{ $cluster }}-daily
   namespace: {{ .Release.Namespace }}
 spec:
   schedule: {{ .Values.db.backup.schedule | quote }}

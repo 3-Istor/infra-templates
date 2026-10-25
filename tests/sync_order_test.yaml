@@ -54,3 +54,19 @@ tests:
       - equal:
           path: metadata.annotations["argocd.argoproj.io/sync-wave"]
           value: "-4"
+
+  - it: names the ScheduledBackup after the cluster so a restore creates a new one
+    template: templates/cnpg-backup.yaml
+    documentIndex: 2
+    set:
+      db.restore.generation: 1
+      db.restore.sourceServer: shop-db
+    asserts:
+      - isKind:
+          of: ScheduledBackup
+      - equal:
+          path: metadata.name
+          value: shop-db-r1-daily
+      - equal:
+          path: spec.cluster.name
+          value: shop-db-r1
