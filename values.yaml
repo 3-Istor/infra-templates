@@ -61,6 +61,10 @@ secrets:
   vaultPath: ""       # Format: "project-<project_name>/<app_name>"
   vaultRole: ""       # Format: "<project_name>-<app_name>-role"
 
+# One app-registry VaultSecret per namespace: set false on all but one release sharing it (fullstack frontend).
+registrySecret:
+  create: true
+
 # -----------------------------------------------------------------------------
 # Image Configuration
 # -----------------------------------------------------------------------------
