@@ -1,0 +1,31 @@
+suite: sso
+templates:
+  - templates/securitypolicy.yaml
+set:
+  fullnameOverride: web
+  project_name: shop
+  app_name: web
+  ingress.enabled: true
+  ingress.hostname: web.example.com
+  ingress.sso_protected: true
+tests:
+  - it: forwards the access token without allowed groups
+    asserts:
+      - equal:
+          path: spec.oidc.forwardAccessToken
+          value: true
+      - notExists:
+          path: spec.jwt
+      - notExists:
+          path: spec.authorization
+
+  - it: keeps the group check with allowed groups
+    set:
+      ingress.allowedGroups: [project-members]
+    asserts:
+      - equal:
+          path: spec.oidc.forwardAccessToken
+          value: true
+      - equal:
+          path: spec.authorization.defaultAction
+          value: Deny

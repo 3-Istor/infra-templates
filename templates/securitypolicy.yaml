@@ -32,13 +32,9 @@ spec:
     
     redirectURL: "https://{{ .Values.ingress.hostname }}/oauth2/callback"
     logoutPath: "/logout"
-    {{- if .Values.ingress.allowedGroups }}
-    {{- /*
-      The OAuth2 filter runs before jwt_authn, so forwarding the access token
-      as a Bearer header is what lets the JWT provider below read the groups
-      claim: the token cookies themselves are encrypted.
-    */}}
+    {{- /* Cookies are encrypted: the Bearer header is how jwt_authn and the app get the token. */}}
     forwardAccessToken: true
+    {{- if .Values.ingress.allowedGroups }}
   jwt:
     providers:
       - name: keycloak
