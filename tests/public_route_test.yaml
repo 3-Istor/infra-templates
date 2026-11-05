@@ -1,0 +1,111 @@
+suite: public route
+templates:
+  - templates/public-route.yaml
+release:
+  name: shop
+set:
+  fullnameOverride: web
+  project_name: shop
+  app_name: web
+  ingress.enabled: true
+  ingress.hostname: web.example.com
+  ingress.sso_protected: true
+tests:
+  - it: renders nothing without public paths
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when ingress is disabled
+    set:
+      ingress.enabled: false
+      ingress.publicPaths:
+        - path: /api/v1/telemetry
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: exposes an exact path and method
+    set:
+      ingress.publicPaths:
+        - path: /api/v1/telemetry
+          method: POST
+    asserts:
+      - equal:
+          path: metadata.name
+          value: web-public-route
+      - equal:
+          path: spec.rules[0].matches[0]
+          value:
+            path:
+              type: Exact
+              value: /api/v1/telemetry
+            method: POST
+      - equal:
+          path: spec.rules[0].backendRefs
+          value:
+            - name: web
+              port: 8000
+      - equal:
+          path: spec.hostnames
+          value:
+            - web.example.com
+      - equal:
+          path: spec.parentRefs
+          value:
+            - name: shared-gateway
+              namespace: gateway-infra
+
+  - it: accepts an explicit prefix
+    set:
+      ingress.publicPaths:
+        - path: /healthz
+          match: PathPrefix
+    asserts:
+      - equal:
+          path: spec.rules[0].matches[0].path.type
+          value: PathPrefix
+      - notExists:
+          path: spec.rules[0].matches[0].method
+
+  - it: puts every public path in a single rule
+    set:
+      ingress.publicPaths:
+        - path: /api/v1/telemetry
+          method: POST
+        - path: /healthz
+    asserts:
+      - lengthEqual:
+          path: spec.rules
+          count: 1
+      - lengthEqual:
+          path: spec.rules[0].matches
+          count: 2
+
+  - it: refuses the whole site as a prefix
+    set:
+      ingress.publicPaths:
+        - path: /
+          match: PathPrefix
+    asserts:
+      - failedTemplate:
+          errorMessage: "ingress.publicPaths: use sso_protected: false instead of exposing / as a prefix"
+
+  - it: refuses a relative path
+    set:
+      ingress.publicPaths:
+        - path: api
+    asserts:
+      - failedTemplate:
+          errorMessage: "ingress.publicPaths: path must start with /"
+
+  - it: sends public traffic to the stable track under canary
+    set:
+      release.strategy: canary
+      ingress.publicPaths:
+        - path: /api/v1/telemetry
+          method: POST
+    asserts:
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: web-stable
