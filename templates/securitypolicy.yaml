@@ -24,6 +24,8 @@ spec:
       issuer: "{{ $issuer }}"
       authorizationEndpoint: "{{ $issuer }}/protocol/openid-connect/auth"
       tokenEndpoint: "{{ $issuer }}/protocol/openid-connect/token"
+      {{- /* Not discovered when the endpoints above are set: without it /logout only clears Envoy's cookies and Keycloak logs the user straight back in. */}}
+      endSessionEndpoint: "{{ $issuer }}/protocol/openid-connect/logout"
     
     clientID: "{{ .Values.ingress.oidc.clientID | default (printf "cnp-%s-%s" .Values.project_name .Values.app_name) }}"
     

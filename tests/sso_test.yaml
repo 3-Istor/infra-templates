@@ -29,3 +29,22 @@ tests:
       - equal:
           path: spec.authorization.defaultAction
           value: Deny
+
+  - it: ends the Keycloak session on logout
+    set:
+      ingress.realm: shop-staging
+    asserts:
+      - equal:
+          path: spec.oidc.logoutPath
+          value: /logout
+      - equal:
+          path: spec.oidc.provider.endSessionEndpoint
+          value: https://auth.3istor.com/realms/shop-staging/protocol/openid-connect/logout
+
+  - it: ends the session at a project's own Keycloak
+    set:
+      ingress.oidc.issuer: https://auth-shop.3istor.com/realms/shop
+    asserts:
+      - equal:
+          path: spec.oidc.provider.endSessionEndpoint
+          value: https://auth-shop.3istor.com/realms/shop/protocol/openid-connect/logout
