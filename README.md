@@ -49,7 +49,7 @@ Leurs valeurs viennent de cnp-projects (`apps/<projet>/<app>/values.yaml`, écri
 - `links` : un Service ExternalName par lien vers une autre app du même projet (`templates/links.yaml`), rendu par l’ApplicationSet depuis `dependsOn`.
 - `registrySecret.scope: project` : le secret de pull GHCR du projet (`project-<projet>/system/registry`, rôle `project-<projet>-system-role`), sans rôle Vault par app.
 
-`links` et `registrySecret.scope: project` échouent au rendu si le namespace ne commence pas par `<project_name>-` : `project_name` vient des valeurs de l’app, le namespace de l’ApplicationSet.
+`cnp.project`, `cnp.app` et `cnp.environment` sont posés par l’ApplicationSet `cnp-apps` en paramètres Helm, qui priment sur tous les fichiers de valeurs : le dépôt de l’app ne peut pas les changer. Le rôle Vault (`<projet>-<app>[-staging]-role`), le chemin Vault (`project-<projet>/<app>[/staging]`, ou un sous-chemin), le secret de registre et les `links` en dérivent uniquement. Le rendu échoue si le namespace n’est pas exactement `<projet>-<app>[-stg]`, si `project_name` désigne un autre projet, si `secrets.vaultRole` n’est pas le rôle de l’app ou si `secrets.vaultPath` sort du chemin de l’app.
 
 `tests/backing/` montre les valeurs attendues de MongoDB, Redis, Neo4j et Elasticsearch ; `tests/imported-service.yaml` celles d’un service importé.
 

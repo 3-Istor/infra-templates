@@ -8,7 +8,11 @@ templates:
   - templates/cnpg-backup.yaml
 release:
   name: shop
+  namespace: p-shop
 set:
+  cnp.project: p
+  cnp.app: shop
+  cnp.environment: prod
   secrets.enabled: true
   secrets.vaultPath: project-p/shop
   db.enabled: true

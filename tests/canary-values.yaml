@@ -12,6 +12,11 @@
 project_name: sandbox
 app_name: demo-app
 namespace: sandbox-demo-app
+# Set by the cnp-apps ApplicationSet as Helm parameters.
+cnp:
+  project: sandbox
+  app: demo-app
+  environment: prod
 
 ingress:
   enabled: true

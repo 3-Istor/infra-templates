@@ -275,18 +275,63 @@ updater keeps writing tags for template apps.
 {{- end }}
 
 {{/*
-project_name comes from the app's own values, so a template app could name
-another project and read its Vault paths or link to its apps. The namespace is
-set by the ApplicationSet, not by the app: anything derived from project_name
-must agree with it. Called with (list $ctx "<feature>").
+Who this release belongs to, as a dict: project, app, environment, namespace,
+and the Vault role and base path of the app. Everything comes from cnp.*,
+which the cnp-apps ApplicationSet sets as Helm parameters: parameters win over
+every values file, so the app repository cannot change them. project_name and
+secrets.vault* are written by the app (deploy values, CMP config) and are never
+trusted for anything that crosses the namespace boundary.
+Called with (list $ctx "<feature>"); use with fromJson.
 */}}
-{{- define "cnp-generic-app.assertOwnProject" -}}
+{{- define "cnp-generic-app.owner" -}}
 {{- $ctx := index . 0 }}
 {{- $feature := index . 1 }}
-{{- if not $ctx.Values.project_name }}
-{{- fail (printf "%s needs project_name" $feature) }}
+{{- $cnp := $ctx.Values.cnp | default dict }}
+{{- if not (and $cnp.project $cnp.app $cnp.environment) }}
+{{- fail (printf "%s needs cnp.project, cnp.app and cnp.environment, set by the ApplicationSet" $feature) }}
 {{- end }}
-{{- if not (hasPrefix (printf "%s-" $ctx.Values.project_name) $ctx.Release.Namespace) }}
-{{- fail (printf "%s: project_name %q does not own namespace %q" $feature $ctx.Values.project_name $ctx.Release.Namespace) }}
+{{- $env := $cnp.environment }}
+{{- if not (has $env (list "prod" "staging")) }}
+{{- fail (printf "%s: cnp.environment %q is not one of prod, staging" $feature $env) }}
 {{- end }}
+{{- $staging := eq $env "staging" }}
+{{- $namespace := printf "%s-%s%s" $cnp.project $cnp.app (ternary "-stg" "" $staging) }}
+{{- if ne $ctx.Release.Namespace $namespace }}
+{{- fail (printf "%s: namespace %q is not %q, the namespace of %s/%s in %s" $feature $ctx.Release.Namespace $namespace $cnp.project $cnp.app $env) }}
+{{- end }}
+{{- if and $ctx.Values.project_name (ne $ctx.Values.project_name $cnp.project) }}
+{{- fail (printf "%s: project_name %q is not this app's project %q" $feature $ctx.Values.project_name $cnp.project) }}
+{{- end }}
+{{- dict
+  "project" $cnp.project
+  "app" $cnp.app
+  "environment" $env
+  "namespace" $namespace
+  "vaultRole" (printf "%s-%s%s-role" $cnp.project $cnp.app (ternary "-staging" "" $staging))
+  "vaultPath" (printf "project-%s/%s%s" $cnp.project $cnp.app (ternary "/staging" "" $staging))
+  | toJson }}
+{{- end }}
+
+{{/*
+The app's VaultSecret path and role. secrets.vaultPath may name a sub-path of
+the app's own Vault path, nothing else; secrets.vaultRole may only repeat the
+app's role. Both are kept in values for existing files, the role rendered is
+always the derived one. Called with (list $ctx "<feature>"); use with fromJson.
+*/}}
+{{- define "cnp-generic-app.vault" -}}
+{{- $ctx := index . 0 }}
+{{- $owner := include "cnp-generic-app.owner" . | fromJson }}
+{{- $path := $ctx.Values.secrets.vaultPath | default $owner.vaultPath | trimSuffix "/" }}
+{{- if not (or (eq $path $owner.vaultPath) (hasPrefix (printf "%s/" $owner.vaultPath) $path)) }}
+{{- fail (printf "secrets.vaultPath %q is outside this app's Vault path %q" $path $owner.vaultPath) }}
+{{- end }}
+{{- if or (contains "/../" (printf "%s/" $path)) (contains "//" $path) }}
+{{- fail (printf "secrets.vaultPath %q is not a plain path" $path) }}
+{{- end }}
+{{- with $ctx.Values.secrets.vaultRole }}
+{{- if ne . $owner.vaultRole }}
+{{- fail (printf "secrets.vaultRole %q is not this app's role %q" . $owner.vaultRole) }}
+{{- end }}
+{{- end }}
+{{- dict "path" $path "role" $owner.vaultRole | toJson }}
 {{- end }}
