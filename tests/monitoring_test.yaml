@@ -1,0 +1,83 @@
+suite: monitoring
+templates:
+  - templates/service.yaml
+  - templates/httproute.yaml
+set:
+  fullnameOverride: web
+  project_name: shop
+  app_name: web
+  cnp:
+    project: shop
+    app: web
+    environment: prod
+  monitoring.enabled: true
+  monitoring.path: "/x\"\nevil: injected&admin=1 #"
+release:
+  namespace: shop-web
+tests:
+  - it: escapes a quote and a newline of the path in an internal check
+    template: templates/service.yaml
+    set:
+      ingress.enabled: false
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            gatus.3istor.com/shop-enabled: "true"
+            gatus.3istor.com/shop-endpoint: |
+              group: "Services Internes"
+              url: "http://web.shop-web.svc:8000/x\"\nevil: injected&admin=1 #"
+              conditions:
+                - "[STATUS] == 200"
+
+  - it: keeps the path one query parameter of the offhours guard
+    template: templates/service.yaml
+    set:
+      ingress.enabled: false
+      offhours.enabled: true
+    asserts:
+      - equal:
+          path: metadata.annotations["gatus.3istor.com/shop-endpoint"]
+          value: |
+            group: "Services Internes"
+            url: "http://offhours-guard.shop-system.svc.cluster.local:8082/health/shop-web/web?port=8000&path=/x%22%0Aevil%3A+injected%26admin%3D1+%23"
+            conditions:
+              - "[STATUS] == 200"
+
+  - it: escapes a quote and a newline of the path in a public check
+    template: templates/httproute.yaml
+    set:
+      ingress.enabled: true
+      ingress.hostname: web-shop.3istor.com
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            gatus.3istor.com/shop-enabled: "true"
+            gatus.3istor.com/shop-endpoint: |
+              group: "Applications"
+              url: "https://web-shop.3istor.com/x\"\nevil: injected&admin=1 #"
+              conditions:
+                - "[STATUS] == 200"
+
+  - it: keeps the path one query parameter of the offhours guard of a public app
+    template: templates/httproute.yaml
+    set:
+      ingress.enabled: true
+      ingress.hostname: web-shop.3istor.com
+      offhours.enabled: true
+    asserts:
+      - matchRegex:
+          path: metadata.annotations["gatus.3istor.com/shop-endpoint"]
+          pattern: 'path=/x%22%0Aevil%3A\+injected%26admin%3D1\+%23"\n'
+
+  - it: leaves a plain path as it was
+    template: templates/service.yaml
+    set:
+      ingress.enabled: false
+      offhours.enabled: true
+      monitoring.path: /api/health-1.0
+    asserts:
+      - matchRegex:
+          path: metadata.annotations["gatus.3istor.com/shop-endpoint"]
+          pattern: 'port=8000&path=/api/health-1.0"\n'
