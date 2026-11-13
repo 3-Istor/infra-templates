@@ -1,0 +1,93 @@
+suite: workload schema (D16)
+templates:
+  - templates/deployment.yaml
+set:
+  project_name: shop
+  app_name: api
+tests:
+  - it: accepts a hardened workload
+    set:
+      workload:
+        securityContext: {allowPrivilegeEscalation: false, runAsNonRoot: true, capabilities: {drop: [ALL]}}
+        podSecurityContext: {runAsNonRoot: true, runAsUser: 1000, fsGroup: 1000}
+        probes:
+          liveness: {httpGet: {path: /health, port: 8080}}
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: refuses a privileged container
+    set:
+      workload.securityContext.privileged: true
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses privilege escalation
+    set:
+      workload.securityContext.allowPrivilegeEscalation: true
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses added capabilities
+    set:
+      workload.securityContext.capabilities.add: [NET_ADMIN]
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses runAsNonRoot false on the container
+    set:
+      workload.securityContext.runAsNonRoot: false
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses runAsNonRoot false on the pod
+    set:
+      workload.podSecurityContext.runAsNonRoot: false
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses running as root
+    set:
+      workload.podSecurityContext.runAsUser: 0
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses an httpGet probe with a host
+    set:
+      workload.probes.liveness.httpGet: {host: 169.254.169.254, path: /, port: 80}
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses a tcpSocket probe with a host
+    set:
+      workload.probes.readiness.tcpSocket: {host: vault.vault.svc, port: 8200}
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses fields outside the workload contract, such as volumes
+    set:
+      workload.volumes: [{name: host, hostPath: {path: /}}]
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses sysctls on the pod
+    set:
+      workload.podSecurityContext.sysctls: [{name: vm.max_map_count, value: "262144"}]
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses a malformed digest
+    set:
+      image.digest: latest
+    asserts:
+      - failedTemplate: {}
+
+  - it: pins the image by digest over the tag
+    set:
+      image.repository: ghcr.io/3-istor/imports/shop/api
+      image.tag: "1.0"
+      image.digest: sha256:32ca39e021b327dcd74b283f131d72b3a7900b805aa1c77a277b88d7e5adf220
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/3-istor/imports/shop/api@sha256:32ca39e021b327dcd74b283f131d72b3a7900b805aa1c77a277b88d7e5adf220

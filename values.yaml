@@ -66,6 +66,9 @@ secrets:
 # One app-registry VaultSecret per namespace: set false on all but one release sharing it (fullstack frontend).
 registrySecret:
   create: true
+  # app reads secrets.vaultPath/registry with the app's role. project reads the
+  # project's credential (templates/registry-secret.yaml), for imported apps.
+  scope: app
 
 # -----------------------------------------------------------------------------
 # Image Configuration
@@ -74,6 +77,8 @@ image:
   repository: ghcr.io/3-istor/template-app-webapp-python-fastapi-react/backend
   pullPolicy: IfNotPresent
   tag: "latest"
+  # sha256:<64 hex>. Wins over tag when set.
+  digest: ""
 
 imagePullSecrets:
   - name: app-registry
@@ -198,6 +203,38 @@ securityContext: {}
 # readOnlyRootFilesystem: true
 # runAsNonRoot: true
 # runAsUser: 1000
+
+# -----------------------------------------------------------------------------
+# Workload (imported services and backing services)
+# -----------------------------------------------------------------------------
+# Empty for template apps: they render exactly as before. Imported apps set it
+# so the chart can run an arbitrary container (command, probes, volumes) and
+# backing services such as MongoDB as a StatefulSet with a persistent volume.
+workload: {}
+#  kind: Deployment            # or StatefulSet
+#  command: []
+#  args: []
+#  probes:                     # plain Kubernetes probe objects
+#    liveness: {}
+#    readiness: {}
+#    startup: {}
+#  securityContext: {}         # container level
+#  podSecurityContext: {}
+#  tmpDirs: []                 # writable emptyDir mounts, e.g. [/tmp]
+#  persistence:                # StatefulSet only
+#    mountPath: /data
+#    size: 1Gi
+#    storageClass: ""
+# values.schema.json bounds this block (D16): no privileged, no privilege
+# escalation, no added capabilities, never runAsNonRoot false, no probe host.
+
+# Other apps of the same project this app calls, as ExternalName Services in
+# this namespace (templates/links.yaml). Set by the cnp-apps ApplicationSet
+# from the registry's dependsOn, never by hand.
+links: []
+#  - alias: mongodb            # the name the app resolves
+#    app: mongodb              # target app of the same project
+#    port: 27017
 
 # -----------------------------------------------------------------------------
 # Service Configuration

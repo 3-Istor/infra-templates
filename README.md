@@ -40,6 +40,19 @@ infra-templates/
     └── vaultsecret.yaml
 ```
 
+## Apps importées (`service`, `backing`)
+
+Leurs valeurs viennent de cnp-projects (`apps/<projet>/<app>/values.yaml`, écrites par le CMP), pas d’un dépôt applicatif. Le chart ajoute pour elles :
+
+- `workload` : commande, sondes, contextes de sécurité, StatefulSet avec PVC conservé à la suppression du StatefulSet (D17, pas à celle du namespace). Un StatefulSet refuse `release.strategy: canary` et `autoscaling.enabled`. `values.schema.json` borne ce bloc (D16) : pas de privileged, d’escalade, de capacités ajoutées, de `runAsNonRoot: false` ni de `host` dans les sondes.
+- `image.digest` : épingle l’image, prioritaire sur `tag`.
+- `links` : un Service ExternalName par lien vers une autre app du même projet (`templates/links.yaml`), rendu par l’ApplicationSet depuis `dependsOn`.
+- `registrySecret.scope: project` : le secret de pull GHCR du projet (`project-<projet>/system/registry`, rôle `project-<projet>-system-role`), sans rôle Vault par app.
+
+`links` et `registrySecret.scope: project` échouent au rendu si le namespace ne commence pas par `<project_name>-` : `project_name` vient des valeurs de l’app, le namespace de l’ApplicationSet.
+
+`tests/backing/` montre les valeurs attendues de MongoDB, Redis, Neo4j et Elasticsearch ; `tests/imported-service.yaml` celles d’un service importé.
+
 ## Utilisation avec Helm
 
 ```bash

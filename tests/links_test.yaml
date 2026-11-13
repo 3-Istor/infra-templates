@@ -1,0 +1,135 @@
+suite: links
+templates:
+  - templates/links.yaml
+release:
+  namespace: shop-api
+set:
+  project_name: shop
+  app_name: api
+  fullnameOverride: api
+tests:
+  - it: renders nothing without links
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: points an alias at the target app's Service in its namespace of the same project
+    set:
+      links:
+        - {alias: db, app: mongodb, port: 27017}
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: db
+      - equal:
+          path: spec.type
+          value: ExternalName
+      - equal:
+          path: spec.externalName
+          value: mongodb.shop-mongodb.svc.cluster.local
+      - equal:
+          path: spec.ports[0].port
+          value: 27017
+
+  - it: names the alias after the target app when none is given
+    set:
+      links:
+        - {app: redis, port: 6379}
+    asserts:
+      - equal:
+          path: metadata.name
+          value: redis
+
+  - it: points a staging app at the staging namespace of the target
+    set:
+      environment: staging
+      links:
+        - {app: redis, port: 6379}
+    asserts:
+      - equal:
+          path: spec.externalName
+          value: redis.shop-redis-stg.svc.cluster.local
+
+  - it: refuses an alias that takes the app's own Service name
+    set:
+      links:
+        - {alias: api, app: mongodb, port: 27017}
+    asserts:
+      - failedTemplate:
+          errorPattern: "is this app's own Service"
+
+  - it: refuses an alias declared twice
+    set:
+      links:
+        - {alias: db, app: mongodb, port: 27017}
+        - {alias: db, app: redis, port: 6379}
+    asserts:
+      - failedTemplate:
+          errorPattern: "declared twice"
+
+  - it: refuses a reserved alias
+    set:
+      links:
+        - {alias: vault, app: mongodb, port: 27017}
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses an alias that is not a DNS label, such as a Service FQDN
+    set:
+      links:
+        - {alias: vault.vault.svc.cluster.local, app: mongodb, port: 27017}
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses a target outside the DNS label alphabet
+    set:
+      links:
+        - {alias: db, app: "vault.vault", port: 8200}
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses links without a project
+    set:
+      project_name: ""
+      links:
+        - {app: mongodb, port: 27017}
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses links when project_name names another project than the namespace
+    release:
+      namespace: other-api
+    set:
+      links:
+        - {app: mongodb, port: 27017}
+    asserts:
+      - failedTemplate:
+          errorPattern: does not own namespace
+
+  - it: accepts links in the staging namespace of its own project
+    release:
+      namespace: shop-api-stg
+    set:
+      environment: staging
+      links:
+        - {app: mongodb, port: 27017}
+    asserts:
+      - equal:
+          path: spec.externalName
+          value: mongodb.shop-mongodb-stg.svc.cluster.local
+
+  - it: refuses an alias that starts with a digit
+    set:
+      links:
+        - {alias: 1db, app: mongodb, port: 27017}
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses a target app that starts with a digit
+    set:
+      links:
+        - {app: 9mongo, port: 27017}
+    asserts:
+      - failedTemplate: {}
