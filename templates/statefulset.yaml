@@ -1,0 +1,68 @@
+{{- if include "cnp-generic-app.isStatefulSet" . }}
+{{- $persistence := dig "persistence" dict .Values.workload }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "cnp-generic-app.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cnp-generic-app.labels" . | nindent 4 }}
+    project: {{ .Values.project_name | quote }}
+spec:
+  replicas: 1
+  serviceName: {{ include "cnp-generic-app.fullname" . }}
+  {{- /* The volume follows the app: deleting it from the CMP must not leave a PVC behind (CNP-208). */}}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Delete
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      {{- include "cnp-generic-app.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cnp-generic-app.selectorLabels" . | nindent 8 }}
+        tenant: {{ .Values.project_name | quote }}
+        {{- with .Values.logRetention }}
+        cnp.3istor.com/log-retention: {{ . | quote }}
+        {{- end }}
+    spec:
+      {{- with (include "cnp-generic-app.workloadPod" . | trim) }}
+      {{- . | nindent 6 }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+        {{- if .Values.service.enabled }}
+        ports:
+        {{- range .Values.service.ports }}
+        - name: {{ .name }}
+          containerPort: {{ .targetPort }}
+          protocol: {{ .protocol | default "TCP" }}
+        {{- end }}
+        {{- end }}
+        {{- include "cnp-generic-app.containerEnv" . | trim | nindent 8 }}
+        {{- with .Values.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with (include "cnp-generic-app.workloadContainer" . | trim) }}
+        {{- . | nindent 8 }}
+        {{- end }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      {{- with $persistence.storageClass }}
+      storageClassName: {{ . }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ $persistence.size | default "1Gi" }}
+{{- end }}

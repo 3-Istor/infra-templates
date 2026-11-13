@@ -200,6 +200,28 @@ securityContext: {}
 # runAsUser: 1000
 
 # -----------------------------------------------------------------------------
+# Workload (imported services and backing services)
+# -----------------------------------------------------------------------------
+# Empty for template apps: they render exactly as before. Imported apps set it
+# so the chart can run an arbitrary container (command, probes, volumes) and
+# backing services such as MongoDB as a StatefulSet with a persistent volume.
+workload: {}
+#  kind: Deployment            # or StatefulSet
+#  command: []
+#  args: []
+#  probes:                     # plain Kubernetes probe objects
+#    liveness: {}
+#    readiness: {}
+#    startup: {}
+#  securityContext: {}         # container level
+#  podSecurityContext: {}
+#  tmpDirs: []                 # writable emptyDir mounts, e.g. [/tmp]
+#  persistence:                # StatefulSet only
+#    mountPath: /data
+#    size: 1Gi
+#    storageClass: ""
+
+# -----------------------------------------------------------------------------
 # Service Configuration
 # -----------------------------------------------------------------------------
 service:

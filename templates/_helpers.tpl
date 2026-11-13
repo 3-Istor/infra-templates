@@ -193,3 +193,71 @@ falling back to a rolling update.
 {{- define "cnp-generic-app.isSticky" -}}
 {{- if and (include "cnp-generic-app.isCanary" .) (eq (dig "stickiness" "cookie" (.Values.release | default dict)) "cookie") }}true{{ end }}
 {{- end }}
+
+{{/*
+Container fields an imported workload may set. Renders nothing when
+.Values.workload is empty, so template apps keep their manifests.
+*/}}
+{{- define "cnp-generic-app.workloadContainer" -}}
+{{- $w := .Values.workload | default dict }}
+{{- with $w.command }}
+command:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with $w.args }}
+args:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- $probes := $w.probes | default dict }}
+{{- with $probes.liveness }}
+livenessProbe:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- if not (include "cnp-generic-app.isCanary" .) }}
+{{- with $probes.readiness }}
+readinessProbe:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
+{{- with $probes.startup }}
+startupProbe:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with $w.securityContext }}
+securityContext:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- if or $w.tmpDirs (eq ($w.kind | default "Deployment") "StatefulSet") }}
+volumeMounts:
+  {{- range $i, $dir := $w.tmpDirs }}
+  - name: tmp-{{ $i }}
+    mountPath: {{ $dir }}
+  {{- end }}
+  {{- if eq ($w.kind | default "Deployment") "StatefulSet" }}
+  - name: data
+    mountPath: {{ dig "persistence" "mountPath" "/data" $w }}
+  {{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Pod-level fields of an imported workload.
+*/}}
+{{- define "cnp-generic-app.workloadPod" -}}
+{{- $w := .Values.workload | default dict }}
+{{- with $w.podSecurityContext }}
+securityContext:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with $w.tmpDirs }}
+volumes:
+  {{- range $i, $dir := . }}
+  - name: tmp-{{ $i }}
+    emptyDir: {}
+  {{- end }}
+{{- end }}
+{{- end }}
+
+{{- define "cnp-generic-app.isStatefulSet" -}}
+{{- if eq (dig "kind" "Deployment" (.Values.workload | default dict)) "StatefulSet" }}true{{- end }}
+{{- end }}

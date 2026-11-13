@@ -1,0 +1,80 @@
+suite: workload
+templates:
+  - templates/deployment.yaml
+  - templates/statefulset.yaml
+set:
+  fullnameOverride: svc
+  project_name: shop
+  app_name: svc
+tests:
+  - it: renders a Deployment without workload fields for template apps
+    template: templates/deployment.yaml
+    asserts:
+      - isKind:
+          of: Deployment
+      - notExists:
+          path: spec.template.spec.containers[0].command
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe
+      - notExists:
+          path: spec.template.spec.volumes
+
+  - it: renders no StatefulSet by default
+    template: templates/statefulset.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: passes command, args and probes of an imported service
+    template: templates/deployment.yaml
+    set:
+      workload:
+        command: [java]
+        args: [-jar, quarkus-run.jar]
+        probes:
+          liveness: {tcpSocket: {port: 8081}}
+          readiness: {httpGet: {path: /q/health/ready, port: 8081}}
+        tmpDirs: [/tmp]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: [java]
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /q/health/ready
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket.port
+          value: 8081
+      - equal:
+          path: spec.template.spec.volumes[0].emptyDir
+          value: {}
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
+          value: /tmp
+
+  - it: runs a backing service as a StatefulSet whose volume is deleted with it
+    set:
+      workload:
+        kind: StatefulSet
+        persistence: {mountPath: /data/db, size: 2Gi}
+    asserts:
+      - template: templates/deployment.yaml
+        hasDocuments:
+          count: 0
+      - template: templates/statefulset.yaml
+        isKind:
+          of: StatefulSet
+      - template: templates/statefulset.yaml
+        equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenDeleted
+          value: Delete
+      - template: templates/statefulset.yaml
+        equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 2Gi
+      - template: templates/statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: data
+            mountPath: /data/db
