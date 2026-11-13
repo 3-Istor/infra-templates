@@ -7,20 +7,18 @@
   its app.
 */}}
 {{- if .Values.links }}
-{{- if not .Values.project_name }}
-{{- fail "links need project_name" }}
-{{- end }}
+{{- include "cnp-generic-app.assertOwnProject" (list . "links") }}
 {{- $own := include "cnp-generic-app.fullname" . }}
 {{- $suffix := ternary "" "-stg" (eq (include "cnp-generic-app.environment" .) "prod") }}
 {{- $reserved := list "kubernetes" "default" "vault" "keycloak" "argocd" }}
 {{- $seen := dict }}
 {{- range .Values.links }}
-{{- if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" .app) }}
-{{- fail (printf "links: app %q is not a DNS-1123 label" .app) }}
+{{- if not (regexMatch "^[a-z]([-a-z0-9]*[a-z0-9])?$" .app) }}
+{{- fail (printf "links: app %q is not a DNS-1035 label" .app) }}
 {{- end }}
 {{- $alias := .alias | default .app }}
-{{- if or (gt (len $alias) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $alias)) }}
-{{- fail (printf "links: alias %q is not a DNS-1123 label" $alias) }}
+{{- if or (gt (len $alias) 63) (not (regexMatch "^[a-z]([-a-z0-9]*[a-z0-9])?$" $alias)) }}
+{{- fail (printf "links: alias %q is not a DNS-1035 label" $alias) }}
 {{- end }}
 {{- if has $alias $reserved }}
 {{- fail (printf "links: alias %q is reserved" $alias) }}

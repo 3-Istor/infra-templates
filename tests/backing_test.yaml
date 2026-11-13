@@ -127,3 +127,24 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
           value: false
+
+  - it: refuses a canary release on a StatefulSet
+    template: templates/statefulset.yaml
+    set:
+      app_name: redis
+      workload.kind: StatefulSet
+      release.strategy: canary
+      ingress.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: cannot take release.strategy canary
+
+  - it: refuses autoscaling on a StatefulSet
+    template: templates/statefulset.yaml
+    set:
+      app_name: redis
+      workload.kind: StatefulSet
+      autoscaling.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: cannot take autoscaling.enabled

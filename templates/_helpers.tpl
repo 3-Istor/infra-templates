@@ -273,3 +273,20 @@ updater keeps writing tags for template apps.
 {{- printf "%v:%v" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) }}
 {{- end }}
 {{- end }}
+
+{{/*
+project_name comes from the app's own values, so a template app could name
+another project and read its Vault paths or link to its apps. The namespace is
+set by the ApplicationSet, not by the app: anything derived from project_name
+must agree with it. Called with (list $ctx "<feature>").
+*/}}
+{{- define "cnp-generic-app.assertOwnProject" -}}
+{{- $ctx := index . 0 }}
+{{- $feature := index . 1 }}
+{{- if not $ctx.Values.project_name }}
+{{- fail (printf "%s needs project_name" $feature) }}
+{{- end }}
+{{- if not (hasPrefix (printf "%s-" $ctx.Values.project_name) $ctx.Release.Namespace) }}
+{{- fail (printf "%s: project_name %q does not own namespace %q" $feature $ctx.Values.project_name $ctx.Release.Namespace) }}
+{{- end }}
+{{- end }}

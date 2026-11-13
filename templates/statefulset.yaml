@@ -1,5 +1,11 @@
 {{- if include "cnp-generic-app.isStatefulSet" . }}
 {{- $persistence := dig "persistence" dict .Values.workload }}
+{{- if include "cnp-generic-app.isCanary" . }}
+{{- fail "workload.kind StatefulSet runs one replica on its own volume: it cannot take release.strategy canary" }}
+{{- end }}
+{{- if and .Values.autoscaling .Values.autoscaling.enabled }}
+{{- fail "workload.kind StatefulSet runs one replica: it cannot take autoscaling.enabled" }}
+{{- end }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -12,9 +18,11 @@ spec:
   replicas: 1
   serviceName: {{ include "cnp-generic-app.fullname" . }}
   {{- /*
-    Retain (D17): a bad registry write followed by an Argo CD prune would
-    otherwise destroy the data. The CMP deletes the PVC itself, after the user
-    confirms the deletion of the app.
+    Retain (D17) keeps the PVC when only the StatefulSet goes, e.g. a bad
+    registry write followed by an Argo CD prune of this app. It does not
+    survive namespace deletion: deleting the namespace deletes its PVCs
+    whatever the policy, which is why the namespace itself is protected from
+    prune and the CMP deletes it, PVC included, once the user confirms.
   */}}
   persistentVolumeClaimRetentionPolicy:
     whenDeleted: Retain

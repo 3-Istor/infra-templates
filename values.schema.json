@@ -5,9 +5,10 @@
   "type": "object",
   "definitions": {
     "dnsLabel": {
+      "description": "DNS-1035: a Service name must start with a letter.",
       "type": "string",
       "maxLength": 63,
-      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+      "pattern": "^[a-z]([-a-z0-9]*[a-z0-9])?$"
     },
     "stringList": {
       "type": "array",

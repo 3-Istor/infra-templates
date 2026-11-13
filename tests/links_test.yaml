@@ -1,6 +1,8 @@
 suite: links
 templates:
   - templates/links.yaml
+release:
+  namespace: shop-api
 set:
   project_name: shop
   app_name: api
@@ -93,5 +95,41 @@ tests:
       project_name: ""
       links:
         - {app: mongodb, port: 27017}
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses links when project_name names another project than the namespace
+    release:
+      namespace: other-api
+    set:
+      links:
+        - {app: mongodb, port: 27017}
+    asserts:
+      - failedTemplate:
+          errorPattern: does not own namespace
+
+  - it: accepts links in the staging namespace of its own project
+    release:
+      namespace: shop-api-stg
+    set:
+      environment: staging
+      links:
+        - {app: mongodb, port: 27017}
+    asserts:
+      - equal:
+          path: spec.externalName
+          value: mongodb.shop-mongodb-stg.svc.cluster.local
+
+  - it: refuses an alias that starts with a digit
+    set:
+      links:
+        - {alias: 1db, app: mongodb, port: 27017}
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses a target app that starts with a digit
+    set:
+      links:
+        - {app: 9mongo, port: 27017}
     asserts:
       - failedTemplate: {}
