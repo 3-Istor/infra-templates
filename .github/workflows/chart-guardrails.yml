@@ -18,6 +18,10 @@ jobs:
         run: |
           helm lint .
           helm lint . -f tests/canary-values.yaml
+          helm lint . -f tests/imported-service.yaml
+          for values in tests/backing/*.yaml; do
+            helm lint . -f "$values" --set project_name=p,app_name=x,fullnameOverride=x
+          done
 
       - name: helm unittest
         run: |
@@ -37,6 +41,12 @@ jobs:
         run: |
           helm template canary . -f tests/canary-values.yaml \
             | kubeconform -strict -summary -ignore-missing-schemas
+          helm template user-service . -f tests/imported-service.yaml \
+            | kubeconform -strict -summary -ignore-missing-schemas
+          for values in tests/backing/*.yaml; do
+            helm template backing . -f "$values" --set project_name=p,app_name=x,fullnameOverride=x \
+              | kubeconform -strict -summary -ignore-missing-schemas
+          done
 
   rendered-diff:
     name: Rendered manifest diff

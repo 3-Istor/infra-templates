@@ -11,9 +11,13 @@ metadata:
 spec:
   replicas: 1
   serviceName: {{ include "cnp-generic-app.fullname" . }}
-  {{- /* The volume follows the app: deleting it from the CMP must not leave a PVC behind (CNP-208). */}}
+  {{- /*
+    Retain (D17): a bad registry write followed by an Argo CD prune would
+    otherwise destroy the data. The CMP deletes the PVC itself, after the user
+    confirms the deletion of the app.
+  */}}
   persistentVolumeClaimRetentionPolicy:
-    whenDeleted: Delete
+    whenDeleted: Retain
     whenScaled: Retain
   selector:
     matchLabels:
@@ -36,7 +40,7 @@ spec:
       {{- end }}
       containers:
       - name: {{ .Chart.Name }}
-        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        image: {{ include "cnp-generic-app.image" . | quote }}
         imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
         {{- if .Values.service.enabled }}
         ports:

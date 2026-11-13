@@ -52,7 +52,7 @@ tests:
           path: spec.template.spec.containers[0].volumeMounts[0].mountPath
           value: /tmp
 
-  - it: runs a backing service as a StatefulSet whose volume is deleted with it
+  - it: runs a backing service as a StatefulSet whose volume outlives it
     set:
       workload:
         kind: StatefulSet
@@ -67,7 +67,7 @@ tests:
       - template: templates/statefulset.yaml
         equal:
           path: spec.persistentVolumeClaimRetentionPolicy.whenDeleted
-          value: Delete
+          value: Retain
       - template: templates/statefulset.yaml
         equal:
           path: spec.volumeClaimTemplates[0].spec.resources.requests.storage

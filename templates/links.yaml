@@ -1,0 +1,52 @@
+{{- /*
+  One ExternalName Service per link, so the app reaches another app of its
+  project under the name its code already uses (D7). The target is always in
+  this project: the namespace is built from project_name, never taken from the
+  values (D18). The cnp-apps ApplicationSet releases imported apps with
+  fullnameOverride set to the app name, so the target's Service is named after
+  its app.
+*/}}
+{{- if .Values.links }}
+{{- if not .Values.project_name }}
+{{- fail "links need project_name" }}
+{{- end }}
+{{- $own := include "cnp-generic-app.fullname" . }}
+{{- $suffix := ternary "" "-stg" (eq (include "cnp-generic-app.environment" .) "prod") }}
+{{- $reserved := list "kubernetes" "default" "vault" "keycloak" "argocd" }}
+{{- $seen := dict }}
+{{- range .Values.links }}
+{{- if not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" .app) }}
+{{- fail (printf "links: app %q is not a DNS-1123 label" .app) }}
+{{- end }}
+{{- $alias := .alias | default .app }}
+{{- if or (gt (len $alias) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $alias)) }}
+{{- fail (printf "links: alias %q is not a DNS-1123 label" $alias) }}
+{{- end }}
+{{- if has $alias $reserved }}
+{{- fail (printf "links: alias %q is reserved" $alias) }}
+{{- end }}
+{{- if eq $alias $own }}
+{{- fail (printf "links: alias %q is this app's own Service" $alias) }}
+{{- end }}
+{{- if hasKey $seen $alias }}
+{{- fail (printf "links: alias %q is declared twice" $alias) }}
+{{- end }}
+{{- $_ := set $seen $alias true }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $alias }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "cnp-generic-app.labels" $ | nindent 4 }}
+    cnp.3istor.com/link-target: {{ .app | quote }}
+spec:
+  type: ExternalName
+  externalName: {{ printf "%s.%s-%s%s.svc.cluster.local" .app $.Values.project_name .app $suffix }}
+  ports:
+    - name: tcp
+      port: {{ .port }}
+      protocol: TCP
+{{- end }}
+{{- end }}

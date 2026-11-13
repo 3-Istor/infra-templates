@@ -1,0 +1,140 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "cnp-generic-app values",
+  "description": "Bounds only what imported apps add (D16): the workload block, links and the image digest. Everything else stays free so existing values files keep rendering.",
+  "type": "object",
+  "definitions": {
+    "dnsLabel": {
+      "type": "string",
+      "maxLength": 63,
+      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+    },
+    "stringList": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "seccompProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["RuntimeDefault"] }
+      }
+    },
+    "probeHandler": {
+      "description": "A probe aims at the pod itself: host would turn the kubelet into a proxy towards any address.",
+      "type": "object",
+      "not": { "required": ["host"] }
+    },
+    "probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "httpGet": { "$ref": "#/definitions/probeHandler" },
+        "tcpSocket": { "$ref": "#/definitions/probeHandler" },
+        "grpc": { "type": "object" },
+        "exec": { "type": "object" },
+        "initialDelaySeconds": { "type": "integer", "minimum": 0 },
+        "periodSeconds": { "type": "integer", "minimum": 1 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "successThreshold": { "type": "integer", "minimum": 1 },
+        "failureThreshold": { "type": "integer", "minimum": 1 },
+        "terminationGracePeriodSeconds": { "type": "integer", "minimum": 1 }
+      }
+    }
+  },
+  "properties": {
+    "image": {
+      "type": "object",
+      "properties": {
+        "digest": {
+          "type": "string",
+          "pattern": "^(sha256:[a-f0-9]{64})?$"
+        }
+      }
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["app", "port"],
+        "properties": {
+          "app": { "$ref": "#/definitions/dnsLabel" },
+          "alias": {
+            "allOf": [
+              { "$ref": "#/definitions/dnsLabel" },
+              { "not": { "enum": ["kubernetes", "default", "vault", "keycloak", "argocd"] } }
+            ]
+          },
+          "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+        }
+      }
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["Deployment", "StatefulSet"] },
+        "command": { "$ref": "#/definitions/stringList" },
+        "args": { "$ref": "#/definitions/stringList" },
+        "probes": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "liveness": { "$ref": "#/definitions/probe" },
+            "readiness": { "$ref": "#/definitions/probe" },
+            "startup": { "$ref": "#/definitions/probe" }
+          }
+        },
+        "securityContext": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "privileged": { "const": false },
+            "allowPrivilegeEscalation": { "const": false },
+            "runAsNonRoot": { "const": true },
+            "runAsUser": { "type": "integer", "minimum": 1 },
+            "runAsGroup": { "type": "integer", "minimum": 0 },
+            "readOnlyRootFilesystem": { "type": "boolean" },
+            "seccompProfile": { "$ref": "#/definitions/seccompProfile" },
+            "capabilities": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "drop": { "$ref": "#/definitions/stringList" },
+                "add": { "type": "array", "maxItems": 0 }
+              }
+            }
+          }
+        },
+        "podSecurityContext": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "runAsNonRoot": { "const": true },
+            "runAsUser": { "type": "integer", "minimum": 1 },
+            "runAsGroup": { "type": "integer", "minimum": 0 },
+            "fsGroup": { "type": "integer", "minimum": 0 },
+            "fsGroupChangePolicy": { "enum": ["Always", "OnRootMismatch"] },
+            "supplementalGroups": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+            "seccompProfile": { "$ref": "#/definitions/seccompProfile" }
+          }
+        },
+        "tmpDirs": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^/[^\\s]*$" }
+        },
+        "persistence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mountPath": { "type": "string", "pattern": "^/[^\\s]*$" },
+            "size": { "type": "string", "pattern": "^[0-9]+(Mi|Gi)$" },
+            "storageClass": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

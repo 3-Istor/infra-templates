@@ -261,3 +261,15 @@ volumes:
 {{- define "cnp-generic-app.isStatefulSet" -}}
 {{- if eq (dig "kind" "Deployment" (.Values.workload | default dict)) "StatefulSet" }}true{{- end }}
 {{- end }}
+
+{{/*
+A digest wins over the tag: the CMP pins imported images by digest, the image
+updater keeps writing tags for template apps.
+*/}}
+{{- define "cnp-generic-app.image" -}}
+{{- with .Values.image.digest }}
+{{- printf "%s@%s" $.Values.image.repository . }}
+{{- else }}
+{{- printf "%v:%v" .Values.image.repository (.Values.image.tag | default .Chart.AppVersion) }}
+{{- end }}
+{{- end }}

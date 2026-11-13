@@ -1,0 +1,129 @@
+suite: backing services
+templates:
+  - templates/statefulset.yaml
+  - templates/deployment.yaml
+  - templates/registry-secret.yaml
+# What the cnp-apps ApplicationSet adds for a backing app: public images, so
+# no pull secret.
+set:
+  project_name: shop
+  imagePullSecrets: []
+  registrySecret.create: false
+  registrySecret.scope: project
+tests:
+  - it: runs MongoDB as uid 999 on a retained volume, pinned by digest
+    values: [backing/mongodb.yaml]
+    set:
+      app_name: mongodb
+      fullnameOverride: mongodb
+    asserts:
+      - template: templates/statefulset.yaml
+        equal:
+          path: metadata.name
+          value: mongodb
+      - template: templates/statefulset.yaml
+        equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 999
+      - template: templates/statefulset.yaml
+        equal:
+          path: spec.persistentVolumeClaimRetentionPolicy.whenDeleted
+          value: Retain
+      - template: templates/statefulset.yaml
+        matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: ^docker\.io/library/mongo@sha256:[a-f0-9]{64}$
+      - template: templates/statefulset.yaml
+        contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content: {name: data, mountPath: /data/db}
+      - template: templates/statefulset.yaml
+        notExists:
+          path: spec.template.spec.imagePullSecrets
+      - template: templates/deployment.yaml
+        hasDocuments:
+          count: 0
+      - template: templates/registry-secret.yaml
+        hasDocuments:
+          count: 0
+
+  - it: runs Redis as uid 999 with an append-only file on its volume
+    values: [backing/redis.yaml]
+    set:
+      app_name: redis
+      fullnameOverride: redis
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 999
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --appendonly
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 6379
+
+  - it: runs Neo4j as uid 7474 with a bounded heap and its password from a Secret
+    values: [backing/neo4j.yaml]
+    set:
+      app_name: neo4j
+      fullnameOverride: neo4j
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 7474
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NEO4J_AUTH
+            valueFrom: {secretKeyRef: {name: neo4j-auth, key: NEO4J_AUTH}}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: NEO4J_server_memory_heap_max__size, value: 512m}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: NEO4J_server_memory_pagecache_size, value: 128m}
+
+  - it: runs Elasticsearch as uid 1000, single node, without mmap or security
+    values: [backing/elasticsearch.yaml]
+    set:
+      app_name: elasticsearch
+      fullnameOverride: elasticsearch
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1000
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: discovery.type, value: single-node}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: xpack.security.enabled, value: "false"}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: node.store.allow_mmap, value: "false"}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: ES_JAVA_OPTS, value: -Xms512m -Xmx512m}
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 1280Mi
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 2Gi
+
+  - it: keeps every backing service non-root and without privilege escalation
+    values: [backing/elasticsearch.yaml]
+    set:
+      app_name: elasticsearch
+    template: templates/statefulset.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
