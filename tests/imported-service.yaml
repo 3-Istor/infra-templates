@@ -42,6 +42,10 @@ workload:
   tmpDirs: [/tmp]
 
 # Added by the ApplicationSet.
+cnp:
+  project: epitweet
+  app: user-service
+  environment: prod
 project_name: epitweet
 app_name: user-service
 fullnameOverride: user-service

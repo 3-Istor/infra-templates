@@ -6,6 +6,15 @@
 project_name: ""
 app_name: ""
 
+# Set by the cnp-apps ApplicationSet as Helm parameters, which win over every
+# values file: the app repository cannot change them. Vault access, the
+# registry secret and links derive from these only, and the release namespace
+# must be <project>-<app>, plus -stg for staging.
+cnp:
+  project: ""
+  app: ""
+  environment: ""
+
 # prod or staging. Set by the app's deploy/env/staging/<component>.yaml, never
 # for prod: prod renders exactly as it did before environments existed. Staging
 # adds the cnp.3istor.com/env label, keeps its database names apart from prod
@@ -60,8 +69,12 @@ ingress:
 # Vault Secrets Operator Configuration
 secrets:
   enabled: false
-  vaultPath: ""       # Format: "project-<project_name>/<app_name>"
-  vaultRole: ""       # Format: "<project_name>-<app_name>-role"
+  # Optional. Defaults to project-<cnp.project>/<cnp.app>[/staging]; anything
+  # else must be a sub-path of it.
+  vaultPath: ""
+  # Optional. Always rendered as <cnp.project>-<cnp.app>[-staging]-role; any
+  # other value fails the render.
+  vaultRole: ""
 
 # One app-registry VaultSecret per namespace: set false on all but one release sharing it (fullstack frontend).
 registrySecret:

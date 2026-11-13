@@ -17,10 +17,10 @@ jobs:
       - name: helm lint
         run: |
           helm lint .
-          helm lint . -f tests/canary-values.yaml
+          helm lint . -f tests/canary-values.yaml --namespace sandbox-demo-app
           helm lint . -f tests/imported-service.yaml --namespace epitweet-user-service
           for values in tests/backing/*.yaml; do
-            helm lint . -f "$values" --namespace p-x --set project_name=p,app_name=x,fullnameOverride=x
+            helm lint . -f "$values" --namespace p-x --set project_name=p,app_name=x,fullnameOverride=x,cnp.project=p,cnp.app=x,cnp.environment=prod
           done
 
       - name: helm unittest
@@ -39,12 +39,12 @@ jobs:
 
       - name: helm template into kubeconform
         run: |
-          helm template canary . -f tests/canary-values.yaml \
+          helm template canary . -f tests/canary-values.yaml --namespace sandbox-demo-app \
             | kubeconform -strict -summary -ignore-missing-schemas
           helm template user-service . -f tests/imported-service.yaml --namespace epitweet-user-service \
             | kubeconform -strict -summary -ignore-missing-schemas
           for values in tests/backing/*.yaml; do
-            helm template backing . -f "$values" --namespace p-x --set project_name=p,app_name=x,fullnameOverride=x \
+            helm template backing . -f "$values" --namespace p-x --set project_name=p,app_name=x,fullnameOverride=x,cnp.project=p,cnp.app=x,cnp.environment=prod \
               | kubeconform -strict -summary -ignore-missing-schemas
           done
 
@@ -65,10 +65,10 @@ jobs:
       - name: Render base
         run: |
           git worktree add /tmp/base "origin/${{ github.base_ref }}"
-          helm template canary /tmp/base -f tests/canary-values.yaml > /tmp/base-render.yaml
+          helm template canary /tmp/base -f tests/canary-values.yaml --namespace sandbox-demo-app > /tmp/base-render.yaml
 
       - name: Render head
-        run: helm template canary . -f tests/canary-values.yaml > /tmp/head-render.yaml
+        run: helm template canary . -f tests/canary-values.yaml --namespace sandbox-demo-app > /tmp/head-render.yaml
 
       - name: Diff
         run: |

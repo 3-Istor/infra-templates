@@ -4,6 +4,9 @@ templates:
 release:
   namespace: shop-api
 set:
+  cnp.project: shop
+  cnp.app: api
+  cnp.environment: prod
   project_name: shop
   app_name: api
   fullnameOverride: api
@@ -43,8 +46,10 @@ tests:
           value: redis
 
   - it: points a staging app at the staging namespace of the target
+    release:
+      namespace: shop-api-stg
     set:
-      environment: staging
+      cnp.environment: staging
       links:
         - {app: redis, port: 6379}
     asserts:
@@ -90,29 +95,38 @@ tests:
     asserts:
       - failedTemplate: {}
 
-  - it: refuses links without a project
+  - it: refuses links without the project set by the ApplicationSet
     set:
-      project_name: ""
+      cnp.project: ""
       links:
         - {app: mongodb, port: 27017}
     asserts:
       - failedTemplate: {}
 
-  - it: refuses links when project_name names another project than the namespace
+  - it: refuses links when the release namespace is not the app's own
     release:
-      namespace: other-api
+      namespace: shop-api-x
     set:
       links:
         - {app: mongodb, port: 27017}
     asserts:
       - failedTemplate:
-          errorPattern: does not own namespace
+          errorPattern: is not "shop-api"
+
+  - it: refuses links when project_name in the app's values names another project
+    set:
+      project_name: other
+      links:
+        - {app: mongodb, port: 27017}
+    asserts:
+      - failedTemplate:
+          errorPattern: is not this app's project
 
   - it: accepts links in the staging namespace of its own project
     release:
       namespace: shop-api-stg
     set:
-      environment: staging
+      cnp.environment: staging
       links:
         - {app: mongodb, port: 27017}
     asserts:
