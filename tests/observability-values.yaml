@@ -1,0 +1,60 @@
+# A template backend that opts in to the D11 instrumentation: probes, metrics
+# scrape annotations and OpenTelemetry traces. Shaped like deploy/values-backend.yaml
+# as app-templates writes it for a new fullstack app.
+project_name: sandbox
+app_name: demo-app
+cnp:
+  project: sandbox
+  app: demo-app
+  environment: prod
+
+image:
+  repository: ghcr.io/3-istor/demo-app/backend
+  tag: "1.4.0"
+
+service:
+  enabled: true
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+
+secrets:
+  enabled: true
+
+db:
+  enabled: true
+  name: demo-app
+
+migrations:
+  enabled: true
+  command: ["/app/migrate"]
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: http
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+metrics:
+  enabled: true
+
+tracing:
+  enabled: true
+
+podAnnotations:
+  example.com/owner: team-a

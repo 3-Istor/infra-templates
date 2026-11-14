@@ -1,0 +1,217 @@
+suite: observability
+templates:
+  - templates/deployment.yaml
+  - templates/statefulset.yaml
+set:
+  fullnameOverride: api
+  project_name: shop
+  app_name: api
+  cnp:
+    project: shop
+    app: api
+    environment: prod
+  image:
+    tag: "2.1.0"
+  service:
+    ports:
+      - name: http
+        port: 8000
+        targetPort: 8000
+release:
+  namespace: shop-api
+tests:
+  - it: renders no probe, annotation or OTEL variable for an app that does not opt in
+    template: templates/deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].livenessProbe
+      - notExists:
+          path: spec.template.spec.containers[0].readinessProbe
+      - notExists:
+          path: spec.template.metadata.annotations
+      - notExists:
+          path: spec.template.spec.containers[0].env
+
+  - it: renders the probes that are enabled, without their switch
+    template: templates/deployment.yaml
+    set:
+      livenessProbe:
+        enabled: true
+        httpGet: {path: /health, port: http}
+        periodSeconds: 10
+      readinessProbe:
+        enabled: true
+        httpGet: {path: /health, port: http}
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe
+          value:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /health
+      - notExists:
+          path: spec.template.spec.containers[0].startupProbe
+
+  - it: lets an imported workload's probe win over the top-level one
+    template: templates/deployment.yaml
+    set:
+      livenessProbe:
+        enabled: true
+      workload:
+        probes:
+          liveness: {tcpSocket: {port: 8081}}
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe
+          value: {tcpSocket: {port: 8081}}
+
+  - it: keeps the release smoke readiness probe under a canary
+    template: templates/deployment.yaml
+    set:
+      ingress.enabled: true
+      release.strategy: canary
+      release.smoke.path: /health
+      readinessProbe:
+        enabled: true
+        httpGet: {path: /ready, port: http}
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /health
+
+  - it: renders podAnnotations on the pod template
+    template: templates/deployment.yaml
+    set:
+      podAnnotations:
+        example.com/owner: team-a
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations
+          value:
+            example.com/owner: team-a
+
+  - it: adds the scrape annotations on the first service port when metrics are on
+    template: templates/deployment.yaml
+    set:
+      metrics.enabled: true
+      podAnnotations:
+        prometheus.io/port: "9999"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations
+          value:
+            prometheus.io/scrape: "true"
+            prometheus.io/port: "8000"
+            prometheus.io/path: /metrics
+
+  - it: scrapes the port and path set in metrics
+    template: templates/deployment.yaml
+    set:
+      metrics:
+        enabled: true
+        port: 9464
+        path: /q/metrics
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/port"]
+          value: "9464"
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/path"]
+          value: /q/metrics
+
+  - it: fails metrics without a port to scrape
+    template: templates/deployment.yaml
+    set:
+      metrics.enabled: true
+      service.enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: "metrics.enabled needs metrics.port, or a service port to take it from"
+
+  - it: sets the OTEL variables from the app name and image tag
+    template: templates/deployment.yaml
+    set:
+      tracing.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env
+          value:
+            - {name: OTEL_SERVICE_NAME, value: api}
+            - {name: APP_VERSION, value: "2.1.0"}
+            - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otelcol-gateway.observability.svc:4317"}
+            - {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: grpc}
+            - {name: OTEL_TRACES_SAMPLER, value: parentbased_traceidratio}
+            - {name: OTEL_TRACES_SAMPLER_ARG, value: "1.0"}
+
+  - it: keeps a sample ratio of zero
+    template: templates/deployment.yaml
+    set:
+      tracing:
+        enabled: true
+        sampleRatio: 0
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: OTEL_TRACES_SAMPLER_ARG, value: "0"}
+
+  - it: puts the OTEL variables before the app's own env
+    template: templates/deployment.yaml
+    set:
+      tracing.enabled: true
+      env:
+        - {name: LOG_LEVEL, value: debug}
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env[6]
+          value: {name: LOG_LEVEL, value: debug}
+
+  - it: refuses OTEL_RESOURCE_ATTRIBUTES with tracing on
+    template: templates/deployment.yaml
+    set:
+      tracing.enabled: true
+      env:
+        - {name: OTEL_RESOURCE_ATTRIBUTES, value: "k8s.namespace.name=other"}
+    asserts:
+      - failedTemplate:
+          errorMessage: "env sets OTEL_RESOURCE_ATTRIBUTES: with tracing.enabled the collector sets the resource attributes, the app only names its service"
+
+  - it: renders the annotations on a StatefulSet too
+    template: templates/statefulset.yaml
+    set:
+      workload.kind: StatefulSet
+      metrics.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["prometheus.io/scrape"]
+          value: "true"
+
+  - it: refuses a probe that aims at another host
+    template: templates/deployment.yaml
+    set:
+      livenessProbe:
+        enabled: true
+        httpGet: {host: 10.0.0.1, path: /, port: 80}
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses a non-string pod annotation
+    template: templates/deployment.yaml
+    set:
+      podAnnotations:
+        example.com/replicas: 3
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses a sample ratio above one
+    template: templates/deployment.yaml
+    set:
+      tracing:
+        enabled: true
+        sampleRatio: 2
+    asserts:
+      - failedTemplate: {}

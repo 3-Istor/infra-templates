@@ -112,7 +112,8 @@ Env and envFrom shared by the app container and the migration Job, so both
 see the same database and secrets.
 */}}
 {{- define "cnp-generic-app.containerEnv" -}}
-{{- if or .Values.db.enabled .Values.env }}
+{{- $tracing := .Values.tracing | default dict }}
+{{- if or .Values.db.enabled .Values.env $tracing.enabled }}
 env:
   {{- if .Values.db.enabled }}
   - name: DB_TYPE
@@ -133,6 +134,9 @@ env:
       secretKeyRef:
         name: {{ include "cnp-generic-app.fullname" . }}-secrets
         key: password
+  {{- end }}
+  {{- if $tracing.enabled }}
+  {{- include "cnp-generic-app.tracingEnv" . | trim | nindent 2 }}
   {{- end }}
   {{- with .Values.env }}
   {{- toYaml . | nindent 2 }}
@@ -195,8 +199,9 @@ falling back to a rolling update.
 {{- end }}
 
 {{/*
-Container fields an imported workload may set. Renders nothing when
-.Values.workload is empty, so template apps keep their manifests.
+Container fields an imported workload may set, and the top-level probes a
+template app enables. Renders nothing when .Values.workload is empty and no
+probe is enabled, so template apps keep their manifests.
 */}}
 {{- define "cnp-generic-app.workloadContainer" -}}
 {{- $w := .Values.workload | default dict }}
@@ -209,17 +214,17 @@ args:
   {{- toYaml . | nindent 2 }}
 {{- end }}
 {{- $probes := $w.probes | default dict }}
-{{- with $probes.liveness }}
+{{- with $probes.liveness | default (include "cnp-generic-app.enabledProbe" .Values.livenessProbe | fromYaml) }}
 livenessProbe:
   {{- toYaml . | nindent 2 }}
 {{- end }}
 {{- if not (include "cnp-generic-app.isCanary" .) }}
-{{- with $probes.readiness }}
+{{- with $probes.readiness | default (include "cnp-generic-app.enabledProbe" .Values.readinessProbe | fromYaml) }}
 readinessProbe:
   {{- toYaml . | nindent 2 }}
 {{- end }}
 {{- end }}
-{{- with $probes.startup }}
+{{- with $probes.startup | default (include "cnp-generic-app.enabledProbe" .Values.startupProbe | fromYaml) }}
 startupProbe:
   {{- toYaml . | nindent 2 }}
 {{- end }}
@@ -238,6 +243,69 @@ volumeMounts:
     mountPath: {{ dig "persistence" "mountPath" "/data" $w }}
   {{- end }}
 {{- end }}
+{{- end }}
+
+{{/*
+A top-level livenessProbe, readinessProbe or startupProbe value without its
+enabled switch, or nothing when it is off.
+*/}}
+{{- define "cnp-generic-app.enabledProbe" -}}
+{{- if and . .enabled }}
+{{- omit . "enabled" | toYaml }}
+{{- end }}
+{{- end }}
+
+{{/*
+podAnnotations plus the scrape annotations of metrics. Renders nothing for an
+app that sets neither, so its pod template, and its pods, stay as they are.
+*/}}
+{{- define "cnp-generic-app.podAnnotations" -}}
+{{- $annotations := deepCopy (.Values.podAnnotations | default dict) }}
+{{- $metrics := .Values.metrics | default dict }}
+{{- if $metrics.enabled }}
+{{- $port := $metrics.port }}
+{{- if not $port }}
+{{- if not (and .Values.service.enabled .Values.service.ports) }}
+{{- fail "metrics.enabled needs metrics.port, or a service port to take it from" }}
+{{- end }}
+{{- $port = (first .Values.service.ports).targetPort }}
+{{- end }}
+{{- $_ := set $annotations "prometheus.io/scrape" "true" }}
+{{- $_ := set $annotations "prometheus.io/port" (toString $port) }}
+{{- $_ := set $annotations "prometheus.io/path" ($metrics.path | default "/metrics") }}
+{{- end }}
+{{- with $annotations }}
+{{- toYaml . }}
+{{- end }}
+{{- end }}
+
+{{/*
+OTEL_* variables of tracing.enabled, in the form every OpenTelemetry SDK reads.
+The resource is limited to the service identity: the collector sets k8s.*,
+the project and the tenant from the connection, and a client must not be able
+to claim them.
+*/}}
+{{- define "cnp-generic-app.tracingEnv" -}}
+{{- $tracing := .Values.tracing }}
+{{- range .Values.env }}
+{{- if eq .name "OTEL_RESOURCE_ATTRIBUTES" }}
+{{- fail "env sets OTEL_RESOURCE_ATTRIBUTES: with tracing.enabled the collector sets the resource attributes, the app only names its service" }}
+{{- end }}
+{{- end }}
+{{- $cnp := .Values.cnp | default dict }}
+{{- $serviceName := $tracing.serviceName | default $cnp.app | default .Values.app_name | default (include "cnp-generic-app.name" .) }}
+- name: OTEL_SERVICE_NAME
+  value: {{ $serviceName | quote }}
+- name: APP_VERSION
+  value: {{ .Values.image.digest | default .Values.image.tag | default .Chart.AppVersion | quote }}
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: {{ $tracing.endpoint | default "http://otelcol-gateway.observability.svc:4317" | quote }}
+- name: OTEL_EXPORTER_OTLP_PROTOCOL
+  value: grpc
+- name: OTEL_TRACES_SAMPLER
+  value: parentbased_traceidratio
+- name: OTEL_TRACES_SAMPLER_ARG
+  value: {{ ternary $tracing.sampleRatio "1.0" (hasKey $tracing "sampleRatio") | toString | quote }}
 {{- end }}
 
 {{/*

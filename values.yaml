@@ -198,9 +198,10 @@ release:
 # -----------------------------------------------------------------------------
 # Pod Annotations et Labels
 # -----------------------------------------------------------------------------
+# Added to the pods. String values only. The prometheus.io/* keys are written
+# from metrics below and win over the same keys here.
 podAnnotations: {}
-# prometheus.io/scrape: "true"
-# prometheus.io/port: "8080"
+# example.com/owner: "team-a"
 
 podLabels: {}
 # team: backend
@@ -307,8 +308,12 @@ affinity: {}
 # -----------------------------------------------------------------------------
 # Probes (Health Checks)
 # -----------------------------------------------------------------------------
+# Rendered only when enabled. They were never rendered before, so they stay off
+# by default: an app that does not serve these paths would be restarted or kept
+# out of its Service. Under a canary the readiness probe is the release smoke
+# path instead. workload.probes, set for imported apps, wins over these.
 livenessProbe:
-  enabled: true
+  enabled: false
   httpGet:
     path: /health
     port: http
@@ -318,7 +323,7 @@ livenessProbe:
   failureThreshold: 3
 
 readinessProbe:
-  enabled: true
+  enabled: false
   httpGet:
     path: /ready
     port: http
@@ -416,6 +421,29 @@ commonAnnotations: {}
 monitoring:
   enabled: true
   path: "/"
+
+# -----------------------------------------------------------------------------
+# Observability (CNP-185, D11)
+# -----------------------------------------------------------------------------
+# Prometheus metrics served by the app: adds the prometheus.io/scrape, port and
+# path pod annotations the platform collector discovers.
+metrics:
+  enabled: false
+  path: /metrics
+  # Container port. Empty uses the first service port's targetPort.
+  port: ""
+
+# OpenTelemetry traces: sets the standard OTEL_* variables, read by the SDKs.
+# service.name is the app name; service.version (APP_VERSION) the image tag or
+# digest. Never OTEL_RESOURCE_ATTRIBUTES: the collector derives the project,
+# namespace and pod from the connection, and the render fails if env sets it.
+tracing:
+  enabled: false
+  endpoint: http://otelcol-gateway.observability.svc:4317
+  # Parent-based: a request that arrives sampled stays sampled.
+  sampleRatio: "1.0"
+  # Empty uses the app name.
+  serviceName: ""
 
 # How long Loki keeps this app's logs: 7d, 14d or 30d (default 14d). A
 # project-level logRetention, set on the namespace, wins over this one.

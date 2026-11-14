@@ -53,6 +53,17 @@ Leurs valeurs viennent de cnp-projects (`apps/<projet>/<app>/values.yaml`, écri
 
 `tests/backing/` montre les valeurs attendues de MongoDB, Redis, Neo4j et Elasticsearch ; `tests/imported-service.yaml` celles d’un service importé.
 
+## Observabilité (CNP-185, D11)
+
+Tout est désactivé par défaut : une app qui n'active rien garde exactement le même rendu.
+
+- `livenessProbe`, `readinessProbe`, `startupProbe` : rendues quand `enabled: true` (constat C7, elles ne l'étaient jamais). Sous canary, la readiness reste le chemin de smoke du release. `workload.probes` prime pour les apps importées.
+- `podAnnotations` : posées sur les pods, valeurs en chaînes uniquement.
+- `metrics.enabled` : annotations `prometheus.io/scrape`, `port` (par défaut le `targetPort` du premier port du Service) et `path` (`/metrics`), lues par le collecteur.
+- `tracing.enabled` : variables `OTEL_*` standard (nom de service = nom de l'app, `APP_VERSION` = tag ou digest de l'image, passerelle `otelcol-gateway.observability.svc:4317`, échantillonnage parent-based). Jamais `OTEL_RESOURCE_ATTRIBUTES` : le collecteur pose projet, namespace et pod d'après la connexion, et le rendu échoue si `env` la définit.
+
+`tests/observability-values.yaml` montre un backend qui active tout.
+
 ## Utilisation avec Helm
 
 ```bash
