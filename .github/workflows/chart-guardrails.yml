@@ -8,7 +8,7 @@ on:
 jobs:
   lint:
     name: Lint and validate
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CNP_CI_RUNS_ON || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
@@ -26,16 +26,19 @@ jobs:
       - name: helm unittest
         run: |
           # Helm 4 refuses unsigned plugins without --verify=false, Helm 3 does not know the flag.
-          helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.2.1 --verify=false \
+          # A self-hosted runner keeps its helm plugins between jobs.
+          helm plugin list | grep -q '^unittest' \
+            || helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.2.1 --verify=false \
             || helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.2.1
           helm unittest .
 
       - name: Install kubeconform
         run: |
-          curl -sSLo /tmp/kubeconform.tar.gz \
+          curl -sSLo "$RUNNER_TEMP/kubeconform.tar.gz" \
             https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz
-          tar -xzf /tmp/kubeconform.tar.gz -C /tmp
-          sudo mv /tmp/kubeconform /usr/local/bin/
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$RUNNER_TEMP/kubeconform.tar.gz" -C "$RUNNER_TEMP/bin" kubeconform
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
       - name: helm template into kubeconform
         run: |
@@ -50,7 +53,7 @@ jobs:
 
   rendered-diff:
     name: Rendered manifest diff
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CNP_CI_RUNS_ON || '"ubuntu-latest"') }}
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -64,15 +67,16 @@ jobs:
       # it does not — see tests/canary-values.yaml.
       - name: Render base
         run: |
-          git worktree add /tmp/base "origin/${{ github.base_ref }}"
-          helm template canary /tmp/base -f tests/canary-values.yaml --namespace sandbox-demo-app > /tmp/base-render.yaml
+          git worktree prune
+          git worktree add $RUNNER_TEMP/base "origin/${{ github.base_ref }}"
+          helm template canary $RUNNER_TEMP/base -f tests/canary-values.yaml --namespace sandbox-demo-app > $RUNNER_TEMP/base-render.yaml
 
       - name: Render head
-        run: helm template canary . -f tests/canary-values.yaml --namespace sandbox-demo-app > /tmp/head-render.yaml
+        run: helm template canary . -f tests/canary-values.yaml --namespace sandbox-demo-app > $RUNNER_TEMP/head-render.yaml
 
       - name: Diff
         run: |
-          if ! diff -u /tmp/base-render.yaml /tmp/head-render.yaml; then
+          if ! diff -u $RUNNER_TEMP/base-render.yaml $RUNNER_TEMP/head-render.yaml; then
             echo "::error::This change alters the rendered output of an existing application."
             echo "Every new value must default to today's output. If the change is"
             echo "intentional, update tests/canary-values.yaml in this PR and say so."
