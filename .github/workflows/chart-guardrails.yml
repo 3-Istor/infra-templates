@@ -19,6 +19,7 @@ jobs:
           helm lint .
           helm lint . -f tests/canary-values.yaml --namespace sandbox-demo-app
           helm lint . -f tests/imported-service.yaml --namespace epitweet-user-service
+          helm lint . -f tests/observability-values.yaml --namespace sandbox-demo-app
           for values in tests/backing/*.yaml; do
             helm lint . -f "$values" --namespace p-x --set project_name=p,app_name=x,fullnameOverride=x,cnp.project=p,cnp.app=x,cnp.environment=prod
           done
@@ -45,6 +46,8 @@ jobs:
           helm template canary . -f tests/canary-values.yaml --namespace sandbox-demo-app \
             | kubeconform -strict -summary -ignore-missing-schemas
           helm template user-service . -f tests/imported-service.yaml --namespace epitweet-user-service \
+            | kubeconform -strict -summary -ignore-missing-schemas
+          helm template demo-app-backend . -f tests/observability-values.yaml --namespace sandbox-demo-app \
             | kubeconform -strict -summary -ignore-missing-schemas
           for values in tests/backing/*.yaml; do
             helm template backing . -f "$values" --namespace p-x --set project_name=p,app_name=x,fullnameOverride=x,cnp.project=p,cnp.app=x,cnp.environment=prod \

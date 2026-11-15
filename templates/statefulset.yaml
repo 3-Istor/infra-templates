@@ -38,6 +38,10 @@ spec:
         {{- with .Values.logRetention }}
         cnp.3istor.com/log-retention: {{ . | quote }}
         {{- end }}
+      {{- with (include "cnp-generic-app.podAnnotations" . | trim) }}
+      annotations:
+        {{- . | nindent 8 }}
+      {{- end }}
     spec:
       {{- with (include "cnp-generic-app.workloadPod" . | trim) }}
       {{- . | nindent 6 }}

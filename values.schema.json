@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "cnp-generic-app values",
-  "description": "Bounds only what imported apps add (D16): the workload block, links and the image digest. Everything else stays free so existing values files keep rendering.",
+  "description": "Bounds what imported apps add (D16): the workload block, links and the image digest, and what reaches the pod from values a project admin edits in the CMP: probes, podAnnotations, metrics and tracing. Everything else stays free so existing values files keep rendering.",
   "type": "object",
   "definitions": {
     "dnsLabel": {
@@ -42,9 +42,64 @@
         "failureThreshold": { "type": "integer", "minimum": 1 },
         "terminationGracePeriodSeconds": { "type": "integer", "minimum": 1 }
       }
+    },
+    "toggledProbe": {
+      "description": "A top-level probe: the fields of a workload probe plus its enabled switch.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "httpGet": { "$ref": "#/definitions/probeHandler" },
+        "tcpSocket": { "$ref": "#/definitions/probeHandler" },
+        "grpc": { "type": "object" },
+        "exec": { "type": "object" },
+        "initialDelaySeconds": { "type": "integer", "minimum": 0 },
+        "periodSeconds": { "type": "integer", "minimum": 1 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "successThreshold": { "type": "integer", "minimum": 1 },
+        "failureThreshold": { "type": "integer", "minimum": 1 },
+        "terminationGracePeriodSeconds": { "type": "integer", "minimum": 1 }
+      }
     }
   },
   "properties": {
+    "livenessProbe": { "$ref": "#/definitions/toggledProbe" },
+    "readinessProbe": { "$ref": "#/definitions/toggledProbe" },
+    "startupProbe": { "$ref": "#/definitions/toggledProbe" },
+    "podAnnotations": {
+      "description": "String values only: a number or a boolean would pass the render and fail at apply time.",
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "path": { "type": "string", "pattern": "^/[^\\s]*$" },
+        "port": {
+          "anyOf": [
+            { "type": "integer", "minimum": 1, "maximum": 65535 },
+            { "type": "string", "pattern": "^[0-9]*$" }
+          ]
+        }
+      }
+    },
+    "tracing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "endpoint": { "type": "string", "pattern": "^https?://[^\\s]+$" },
+        "sampleRatio": {
+          "anyOf": [
+            { "type": "number", "minimum": 0, "maximum": 1 },
+            { "type": "string", "pattern": "^(0(\\.[0-9]+)?|1(\\.0+)?)$" }
+          ]
+        },
+        "serviceName": { "type": "string", "pattern": "^[a-zA-Z0-9._-]*$" }
+      }
+    },
     "image": {
       "type": "object",
       "properties": {
