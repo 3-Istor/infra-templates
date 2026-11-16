@@ -57,6 +57,19 @@ tests:
           path: metadata.annotations["argocd.argoproj.io/sync-wave"]
           value: "-5"
 
+  - it: vault mode ignores a custom secrets.vaultPath
+    template: templates/cnpg-backup.yaml
+    set:
+      db.backup.bucket: vault
+      secrets.vaultPath: project-shop/api/custom
+    asserts:
+      - documentSelector:
+          path: kind
+          value: VaultSecret
+        equal:
+          path: spec.path
+          value: project-shop/api/backup
+
   - it: vault mode on staging
     template: templates/cnpg-backup.yaml
     release:

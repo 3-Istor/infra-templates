@@ -15,7 +15,8 @@ spec:
   bucketName: {{ $bucket }}
   storageClassName: {{ ternary "ceph-bucket-retain" "ceph-bucket" .Values.db.backup.keepAfterDelete }}
 {{- else }}
-{{- $vault := include "cnp-generic-app.vault" (list . "db.backup") | fromJson }}
+{{- /* Fixed path, whatever secrets.vaultPath says: the CMP writes the key there. */}}
+{{- $owner := include "cnp-generic-app.owner" (list . "db.backup") | fromJson }}
 apiVersion: ricoberger.de/v1alpha1
 kind: VaultSecret
 metadata:
@@ -25,8 +26,8 @@ metadata:
     # Before the ObjectStore (-4) that reads this Secret.
     argocd.argoproj.io/sync-wave: "-5"
 spec:
-  path: {{ $vault.path }}/backup
-  vaultRole: {{ $vault.role }}
+  path: {{ $owner.vaultPath }}/backup
+  vaultRole: {{ $owner.vaultRole }}
   type: Opaque
 {{- end }}
 ---
