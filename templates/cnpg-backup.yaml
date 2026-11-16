@@ -2,6 +2,7 @@
 {{- $base := include "cnp-generic-app.dbBaseName" . }}
 {{- $cluster := include "cnp-generic-app.dbClusterName" . }}
 {{- $bucket := printf "cnpg-%s" $base }}
+{{- if eq .Values.db.backup.bucket "rook" }}
 apiVersion: objectbucket.io/v1alpha1
 kind: ObjectBucketClaim
 metadata:
@@ -13,6 +14,21 @@ metadata:
 spec:
   bucketName: {{ $bucket }}
   storageClassName: {{ ternary "ceph-bucket-retain" "ceph-bucket" .Values.db.backup.keepAfterDelete }}
+{{- else }}
+{{- $vault := include "cnp-generic-app.vault" (list . "db.backup") | fromJson }}
+apiVersion: ricoberger.de/v1alpha1
+kind: VaultSecret
+metadata:
+  name: {{ $base }}-backup
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    # Before the ObjectStore (-4) that reads this Secret.
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  path: {{ $vault.path }}/backup
+  vaultRole: {{ $vault.role }}
+  type: Opaque
+{{- end }}
 ---
 apiVersion: barmancloud.cnpg.io/v1
 kind: ObjectStore
@@ -26,7 +42,7 @@ spec:
   configuration:
     destinationPath: "s3://{{ $bucket }}/"
     endpointURL: {{ .Values.db.backup.endpointURL | quote }}
-    {{- /* The ObjectBucketClaim's Secret, created by Rook with the bucket. */}}
+    {{- /* Secret of the ObjectBucketClaim (rook) or the VaultSecret (vault). */}}
     s3Credentials:
       accessKeyId:
         name: {{ $base }}-backup

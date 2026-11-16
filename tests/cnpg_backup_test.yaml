@@ -1,0 +1,90 @@
+suite: cnpg backup
+templates:
+  - templates/cnpg-backup.yaml
+  - templates/cnpg-cluster.yaml
+release:
+  name: shop-api-backend
+  namespace: shop-api
+set:
+  cnp.project: shop
+  cnp.app: api
+  cnp.environment: prod
+  db.enabled: true
+  db.backup.enabled: true
+tests:
+  - it: rook mode keeps the claim
+    template: templates/cnpg-backup.yaml
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: ObjectBucketClaim
+      - equal:
+          path: metadata.name
+          value: shop-api-backend-db-backup
+      - equal:
+          path: spec.bucketName
+          value: cnpg-shop-api-backend-db
+
+  - it: vault mode renders no claim
+    template: templates/cnpg-backup.yaml
+    set:
+      db.backup.bucket: vault
+    asserts:
+      - hasDocuments:
+          count: 3
+      - documentSelector:
+          path: kind
+          value: VaultSecret
+        equal:
+          path: metadata.name
+          value: shop-api-backend-db-backup
+      - documentSelector:
+          path: kind
+          value: VaultSecret
+        equal:
+          path: spec.path
+          value: project-shop/api/backup
+      - documentSelector:
+          path: kind
+          value: VaultSecret
+        equal:
+          path: spec.vaultRole
+          value: shop-api-role
+      - documentSelector:
+          path: kind
+          value: VaultSecret
+        equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "-5"
+
+  - it: vault mode on staging
+    template: templates/cnpg-backup.yaml
+    release:
+      name: shop-api-backend-stg
+      namespace: shop-api-stg
+    set:
+      cnp.environment: staging
+      db.backup.bucket: vault
+    asserts:
+      - documentSelector:
+          path: kind
+          value: VaultSecret
+        equal:
+          path: spec.path
+          value: project-shop/api/staging/backup
+      - documentSelector:
+          path: kind
+          value: VaultSecret
+        equal:
+          path: metadata.name
+          value: shop-api-backend-stg-db-backup
+
+  - it: cluster carries scrape annotations
+    template: templates/cnpg-cluster.yaml
+    asserts:
+      - equal:
+          path: spec.inheritedMetadata.annotations["prometheus.io/scrape"]
+          value: "true"
+      - equal:
+          path: spec.inheritedMetadata.annotations["prometheus.io/port"]
+          value: "9187"

@@ -134,6 +134,8 @@ db:
   backup:
     enabled: false
     keepAfterDelete: false
+    # rook: an ObjectBucketClaim yields the key; vault: a VaultSecret reads it (clusters without Rook).
+    bucket: rook
     # Cron with seconds, as CNPG's ScheduledBackup expects.
     schedule: "0 0 3 * * *"
     retentionPolicy: "7d"
