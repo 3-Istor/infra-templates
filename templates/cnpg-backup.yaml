@@ -14,7 +14,7 @@ metadata:
 spec:
   bucketName: {{ $bucket }}
   storageClassName: {{ ternary "ceph-bucket-retain" "ceph-bucket" .Values.db.backup.keepAfterDelete }}
-{{- else }}
+{{- else if eq .Values.db.backup.bucket "vault" }}
 {{- /* Fixed path, whatever secrets.vaultPath says: the CMP writes the key there. */}}
 {{- $owner := include "cnp-generic-app.owner" (list . "db.backup") | fromJson }}
 apiVersion: ricoberger.de/v1alpha1
@@ -29,6 +29,8 @@ spec:
   path: {{ $owner.vaultPath }}/backup
   vaultRole: {{ $owner.vaultRole }}
   type: Opaque
+{{- else }}
+{{- fail (printf "db.backup.bucket %q is not one of rook, vault" .Values.db.backup.bucket) }}
 {{- end }}
 ---
 apiVersion: barmancloud.cnpg.io/v1

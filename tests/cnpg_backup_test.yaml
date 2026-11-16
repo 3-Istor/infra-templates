@@ -77,6 +77,7 @@ tests:
       namespace: shop-api-stg
     set:
       cnp.environment: staging
+      environment: staging
       db.backup.bucket: vault
     asserts:
       - documentSelector:
@@ -101,3 +102,49 @@ tests:
       - equal:
           path: spec.inheritedMetadata.annotations["prometheus.io/port"]
           value: "9187"
+
+  - it: rejects an unknown backup bucket
+    template: templates/cnpg-backup.yaml
+    set:
+      db.backup.bucket: valut
+    asserts:
+      - failedTemplate: {}
+
+  - it: latest restore renders no recoveryTarget
+    template: templates/cnpg-cluster.yaml
+    set:
+      db.restore.generation: 1
+      db.restore.sourceServer: shop-db
+      db.restore.backupID: ""
+      db.restore.targetTime: ""
+    asserts:
+      - notExists:
+          path: spec.bootstrap.recovery.recoveryTarget
+
+  - it: restore of a backup without targetTime stops at its end
+    template: templates/cnpg-cluster.yaml
+    set:
+      db.restore.generation: 1
+      db.restore.sourceServer: shop-db
+      db.restore.backupID: b1
+    asserts:
+      - equal:
+          path: spec.bootstrap.recovery.recoveryTarget.backupID
+          value: b1
+      - equal:
+          path: spec.bootstrap.recovery.recoveryTarget.targetImmediate
+          value: true
+
+  - it: restore with targetTime replays WAL up to it
+    template: templates/cnpg-cluster.yaml
+    set:
+      db.restore.generation: 1
+      db.restore.sourceServer: shop-db
+      db.restore.backupID: b1
+      db.restore.targetTime: "2026-11-01T10:00:00Z"
+    asserts:
+      - equal:
+          path: spec.bootstrap.recovery.recoveryTarget.targetTime
+          value: "2026-11-01T10:00:00Z"
+      - notExists:
+          path: spec.bootstrap.recovery.recoveryTarget.targetImmediate
