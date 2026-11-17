@@ -93,8 +93,16 @@ tests:
           path: metadata.name
           value: shop-api-backend-stg-db-backup
 
-  - it: cluster carries scrape annotations
+  - it: cluster has no scrape annotations by default
     template: templates/cnpg-cluster.yaml
+    asserts:
+      - notExists:
+          path: spec.inheritedMetadata
+
+  - it: cluster carries scrape annotations when db.metrics is on
+    template: templates/cnpg-cluster.yaml
+    set:
+      db.metrics: true
     asserts:
       - equal:
           path: spec.inheritedMetadata.annotations["prometheus.io/scrape"]

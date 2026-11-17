@@ -24,11 +24,13 @@ metadata:
     {{- /* Healthy before the backup and migration hooks run (see migrations.yaml). */}}
     argocd.argoproj.io/sync-wave: "-3"
 spec:
+  {{- if .Values.db.metrics }}
   inheritedMetadata:
     annotations:
       # CNPG exporter port; read by the on-prem annotated-pods scrape and the cloud Alloy.
       prometheus.io/scrape: "true"
       prometheus.io/port: "9187"
+  {{- end }}
   instances: {{ .Values.db.instances }}
   {{- with .Values.db.imageName }}
   imageName: {{ . }}
