@@ -2,6 +2,7 @@
 {{- $base := include "cnp-generic-app.dbBaseName" . }}
 {{- $cluster := include "cnp-generic-app.dbClusterName" . }}
 {{- $bucket := printf "cnpg-%s" $base }}
+{{- if eq .Values.db.backup.bucket "rook" }}
 apiVersion: objectbucket.io/v1alpha1
 kind: ObjectBucketClaim
 metadata:
@@ -13,6 +14,24 @@ metadata:
 spec:
   bucketName: {{ $bucket }}
   storageClassName: {{ ternary "ceph-bucket-retain" "ceph-bucket" .Values.db.backup.keepAfterDelete }}
+{{- else if eq .Values.db.backup.bucket "vault" }}
+{{- /* Fixed path, whatever secrets.vaultPath says: the CMP writes the key there. */}}
+{{- $owner := include "cnp-generic-app.owner" (list . "db.backup") | fromJson }}
+apiVersion: ricoberger.de/v1alpha1
+kind: VaultSecret
+metadata:
+  name: {{ $base }}-backup
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    # Before the ObjectStore (-4) that reads this Secret.
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  path: {{ $owner.vaultPath }}/backup
+  vaultRole: {{ $owner.vaultRole }}
+  type: Opaque
+{{- else }}
+{{- fail (printf "db.backup.bucket %q is not one of rook, vault" .Values.db.backup.bucket) }}
+{{- end }}
 ---
 apiVersion: barmancloud.cnpg.io/v1
 kind: ObjectStore
@@ -26,7 +45,7 @@ spec:
   configuration:
     destinationPath: "s3://{{ $bucket }}/"
     endpointURL: {{ .Values.db.backup.endpointURL | quote }}
-    {{- /* The ObjectBucketClaim's Secret, created by Rook with the bucket. */}}
+    {{- /* Secret of the ObjectBucketClaim (rook) or the VaultSecret (vault). */}}
     s3Credentials:
       accessKeyId:
         name: {{ $base }}-backup

@@ -118,6 +118,10 @@ db:
   # Prod should be at least 2 once the cluster can carry it; staging stays at 1.
   instances: 1
 
+  # Scrape annotations for the CNPG exporter (WAL archiving alert). Off by default:
+  # turning it on changes the instance pods, so CNPG restarts an existing database.
+  metrics: false
+
   # Off by default: storage is scarce, so a database is backed up only when
   # its owner asks for it, from the CMP or here.
   #
@@ -134,6 +138,8 @@ db:
   backup:
     enabled: false
     keepAfterDelete: false
+    # rook: an ObjectBucketClaim yields the key; vault: a VaultSecret reads it (clusters without Rook).
+    bucket: rook
     # Cron with seconds, as CNPG's ScheduledBackup expects.
     schedule: "0 0 3 * * *"
     retentionPolicy: "7d"

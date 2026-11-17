@@ -24,6 +24,13 @@ metadata:
     {{- /* Healthy before the backup and migration hooks run (see migrations.yaml). */}}
     argocd.argoproj.io/sync-wave: "-3"
 spec:
+  {{- if .Values.db.metrics }}
+  inheritedMetadata:
+    annotations:
+      # CNPG exporter port; read by the on-prem annotated-pods scrape and the cloud Alloy.
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "9187"
+  {{- end }}
   instances: {{ .Values.db.instances }}
   {{- with .Values.db.imageName }}
   imageName: {{ . }}
@@ -36,15 +43,16 @@ spec:
       owner: app
       secret:
         name: {{ include "cnp-generic-app.fullname" . }}-secrets
+      {{- /* No recoveryTarget for "latest": CNPG then replays all WAL; targetImmediate would stop at the base backup. */}}
+      {{- if $restore.backupID }}
       recoveryTarget:
-        {{- with $restore.backupID }}
-        backupID: {{ . | quote }}
-        {{- end }}
+        backupID: {{ $restore.backupID | quote }}
         {{- if $restore.targetTime }}
         targetTime: {{ $restore.targetTime | quote }}
         {{- else }}
         targetImmediate: true
         {{- end }}
+      {{- end }}
     {{- else }}
     initdb:
       database: {{ .Values.db.name | default .Values.app_name }}

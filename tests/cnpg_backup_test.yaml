@@ -1,0 +1,158 @@
+suite: cnpg backup
+templates:
+  - templates/cnpg-backup.yaml
+  - templates/cnpg-cluster.yaml
+release:
+  name: shop-api-backend
+  namespace: shop-api
+set:
+  cnp.project: shop
+  cnp.app: api
+  cnp.environment: prod
+  db.enabled: true
+  db.backup.enabled: true
+tests:
+  - it: rook mode keeps the claim
+    template: templates/cnpg-backup.yaml
+    documentIndex: 0
+    asserts:
+      - isKind:
+          of: ObjectBucketClaim
+      - equal:
+          path: metadata.name
+          value: shop-api-backend-db-backup
+      - equal:
+          path: spec.bucketName
+          value: cnpg-shop-api-backend-db
+
+  - it: vault mode renders no claim
+    template: templates/cnpg-backup.yaml
+    set:
+      db.backup.bucket: vault
+    asserts:
+      - hasDocuments:
+          count: 3
+      - documentSelector:
+          path: kind
+          value: VaultSecret
+        equal:
+          path: metadata.name
+          value: shop-api-backend-db-backup
+      - documentSelector:
+          path: kind
+          value: VaultSecret
+        equal:
+          path: spec.path
+          value: project-shop/api/backup
+      - documentSelector:
+          path: kind
+          value: VaultSecret
+        equal:
+          path: spec.vaultRole
+          value: shop-api-role
+      - documentSelector:
+          path: kind
+          value: VaultSecret
+        equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "-5"
+
+  - it: vault mode ignores a custom secrets.vaultPath
+    template: templates/cnpg-backup.yaml
+    set:
+      db.backup.bucket: vault
+      secrets.vaultPath: project-shop/api/custom
+    asserts:
+      - documentSelector:
+          path: kind
+          value: VaultSecret
+        equal:
+          path: spec.path
+          value: project-shop/api/backup
+
+  - it: vault mode on staging
+    template: templates/cnpg-backup.yaml
+    release:
+      name: shop-api-backend-stg
+      namespace: shop-api-stg
+    set:
+      cnp.environment: staging
+      environment: staging
+      db.backup.bucket: vault
+    asserts:
+      - documentSelector:
+          path: kind
+          value: VaultSecret
+        equal:
+          path: spec.path
+          value: project-shop/api/staging/backup
+      - documentSelector:
+          path: kind
+          value: VaultSecret
+        equal:
+          path: metadata.name
+          value: shop-api-backend-stg-db-backup
+
+  - it: cluster has no scrape annotations by default
+    template: templates/cnpg-cluster.yaml
+    asserts:
+      - notExists:
+          path: spec.inheritedMetadata
+
+  - it: cluster carries scrape annotations when db.metrics is on
+    template: templates/cnpg-cluster.yaml
+    set:
+      db.metrics: true
+    asserts:
+      - equal:
+          path: spec.inheritedMetadata.annotations["prometheus.io/scrape"]
+          value: "true"
+      - equal:
+          path: spec.inheritedMetadata.annotations["prometheus.io/port"]
+          value: "9187"
+
+  - it: rejects an unknown backup bucket
+    template: templates/cnpg-backup.yaml
+    set:
+      db.backup.bucket: valut
+    asserts:
+      - failedTemplate: {}
+
+  - it: latest restore renders no recoveryTarget
+    template: templates/cnpg-cluster.yaml
+    set:
+      db.restore.generation: 1
+      db.restore.sourceServer: shop-db
+      db.restore.backupID: ""
+      db.restore.targetTime: ""
+    asserts:
+      - notExists:
+          path: spec.bootstrap.recovery.recoveryTarget
+
+  - it: restore of a backup without targetTime stops at its end
+    template: templates/cnpg-cluster.yaml
+    set:
+      db.restore.generation: 1
+      db.restore.sourceServer: shop-db
+      db.restore.backupID: b1
+    asserts:
+      - equal:
+          path: spec.bootstrap.recovery.recoveryTarget.backupID
+          value: b1
+      - equal:
+          path: spec.bootstrap.recovery.recoveryTarget.targetImmediate
+          value: true
+
+  - it: restore with targetTime replays WAL up to it
+    template: templates/cnpg-cluster.yaml
+    set:
+      db.restore.generation: 1
+      db.restore.sourceServer: shop-db
+      db.restore.backupID: b1
+      db.restore.targetTime: "2026-11-01T10:00:00Z"
+    asserts:
+      - equal:
+          path: spec.bootstrap.recovery.recoveryTarget.targetTime
+          value: "2026-11-01T10:00:00Z"
+      - notExists:
+          path: spec.bootstrap.recovery.recoveryTarget.targetImmediate
