@@ -1,0 +1,138 @@
+suite: bucket
+templates:
+  - templates/bucket.yaml
+  - templates/deployment.yaml
+release:
+  name: shop-api-backend
+  namespace: shop-api
+set:
+  cnp.project: shop
+  cnp.app: api
+  cnp.environment: prod
+  bucket.enabled: true
+tests:
+  - it: renders nothing by default
+    template: templates/bucket.yaml
+    set:
+      bucket.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: rook mode claims a retained bucket named after the release
+    template: templates/bucket.yaml
+    asserts:
+      - isKind:
+          of: ObjectBucketClaim
+      - equal:
+          path: metadata.name
+          value: shop-api-backend-cnp-generic-app-bucket
+      - equal:
+          path: spec.bucketName
+          value: cnp-shop-api-backend
+      - equal:
+          path: spec.storageClassName
+          value: ceph-bucket-retain
+
+  - it: staging gets its own bucket
+    template: templates/bucket.yaml
+    release:
+      name: shop-api-backend-stg
+    set:
+      environment: staging
+    asserts:
+      - equal:
+          path: spec.bucketName
+          value: cnp-shop-api-backend-stg
+
+  - it: rook mode gives the app the S3 variables from the claim
+    template: templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: S3_ENDPOINT
+            value: http://192.168.1.110:7480
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: S3_BUCKET
+            valueFrom:
+              configMapKeyRef:
+                name: shop-api-backend-cnp-generic-app-bucket
+                key: BUCKET_NAME
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: S3_REGION
+            valueFrom:
+              configMapKeyRef:
+                name: shop-api-backend-cnp-generic-app-bucket
+                key: BUCKET_REGION
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: shop-api-backend-cnp-generic-app-bucket
+                key: AWS_ACCESS_KEY_ID
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: shop-api-backend-cnp-generic-app-bucket
+                key: AWS_SECRET_ACCESS_KEY
+
+  - it: vault mode reads the bucket from the app's own Vault path
+    template: templates/bucket.yaml
+    set:
+      bucket.mode: vault
+      secrets.vaultPath: project-shop/api/custom
+    asserts:
+      - isKind:
+          of: VaultSecret
+      - equal:
+          path: spec.path
+          value: project-shop/api/bucket
+      - equal:
+          path: spec.vaultRole
+          value: shop-api-role
+
+  - it: vault mode passes the secret whole to the app
+    template: templates/deployment.yaml
+    set:
+      bucket.mode: vault
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].envFrom
+          content:
+            secretRef:
+              name: shop-api-backend-cnp-generic-app-bucket
+      - notExists:
+          path: spec.template.spec.containers[0].env
+
+  - it: vault mode refuses a release without its ApplicationSet identity
+    template: templates/bucket.yaml
+    set:
+      bucket.mode: vault
+      cnp: null
+    asserts:
+      - failedTemplate:
+          errorPattern: "bucket needs cnp.project"
+
+  - it: rejects an unknown mode
+    template: templates/bucket.yaml
+    set:
+      bucket.mode: minio
+    asserts:
+      - failedTemplate: {}
+
+  - it: rejects a storage class outside the RGW ones
+    template: templates/bucket.yaml
+    set:
+      bucket.storageClass: local-path
+    asserts:
+      - failedTemplate: {}

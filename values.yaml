@@ -248,6 +248,23 @@ workload: {}
 # values.schema.json bounds this block (D16): no privileged, no privilege
 # escalation, no added capabilities, never runAsNonRoot false, no probe host.
 
+# -----------------------------------------------------------------------------
+# Object storage
+# -----------------------------------------------------------------------------
+# One S3 bucket for the app, internal only. The app gets S3_ENDPOINT, S3_BUCKET,
+# S3_REGION, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.
+#   rook:  an ObjectBucketClaim on the OpenStack Ceph RGW (K3s rook-ceph
+#          object-store.yaml). ceph-bucket-retain keeps the bucket when the
+#          claim, the app or the project is deleted; ceph-bucket deletes it.
+#   vault: clusters without Rook. A VaultSecret reads all five variables from
+#          project-<project>/<app>[/staging]/bucket, written by the CMP.
+bucket:
+  enabled: false
+  mode: rook
+  storageClass: ceph-bucket-retain
+  # rook only: Rook's BUCKET_HOST names no reachable endpoint for this RGW.
+  endpointURL: http://192.168.1.110:7480
+
 # Other apps of the same project this app calls, as ExternalName Services in
 # this namespace (templates/links.yaml). Set by the cnp-apps ApplicationSet
 # from the registry's dependsOn, never by hand.
