@@ -104,18 +104,19 @@ db:
   name: ""
   storage: "1Gi"
 
-  # local-path is the on-prem storage class and does not exist on AWS or GCP.
-  # The per-cluster profile supplies the right one (D-08).
-  storageClass: local-path
+  # Empty: picked from the destination cluster. With Rook (on-prem) it is
+  # ceph-rbd, Ceph pool "kubernetes" (CNP-315): the volume follows the pod to
+  # any node and grows in place. Without Rook (AWS, GCP) it is local-path, the
+  # only class their guardrails accept (other classes are paid cloud disks).
+  storageClass: ""
 
   # Pinned rather than left to the operator's default, which is frozen into
   # each Cluster when it is created: a new default never reaches existing
   # databases. Same major only; a minor bump is a rolling restart.
   imageName: ghcr.io/cloudnative-pg/postgresql:18.6-202610050823-system-trixie@sha256:3e89ea90485ffda67094fd6950d9d61dec9ec314aabc8d63c048c67759918621
 
-  # A single instance on node-local storage does not survive a node loss, which
-  # sits badly next to "an already-deployed application must keep working".
-  # Prod should be at least 2 once the cluster can carry it; staging stays at 1.
+  # One instance: on Ceph the volume survives a node loss and the pod restarts
+  # elsewhere, and the MVP carries no HA.
   instances: 1
 
   # Scrape annotations for the CNPG exporter (WAL archiving alert). Off by default:

@@ -62,8 +62,7 @@ spec:
     {{- end }}
   storage:
     size: {{ .Values.db.storage | default "1Gi" }}
-    {{- /* local-path exists only on-prem; every other cluster profile supplies its own. */}}
-    storageClass: {{ .Values.db.storageClass }}
+    storageClass: {{ .Values.db.storageClass | default (ternary "ceph-rbd" "local-path" (.Capabilities.APIVersions.Has "ceph.rook.io/v1")) }}
   {{- if .Values.db.backup.enabled }}
   plugins:
     - name: barman-cloud.cloudnative-pg.io
