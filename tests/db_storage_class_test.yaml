@@ -1,0 +1,37 @@
+suite: database storage class
+templates:
+  - templates/cnpg-cluster.yaml
+release:
+  name: shop-api-backend
+  namespace: shop-api
+set:
+  cnp.project: shop
+  cnp.app: api
+  cnp.environment: prod
+  db.enabled: true
+tests:
+  - it: uses ceph-rbd on a cluster with Rook
+    capabilities:
+      apiVersions:
+        - ceph.rook.io/v1
+    asserts:
+      - equal:
+          path: spec.storage.storageClass
+          value: ceph-rbd
+
+  - it: uses local-path on a cluster without Rook
+    asserts:
+      - equal:
+          path: spec.storage.storageClass
+          value: local-path
+
+  - it: keeps an explicit storage class
+    set:
+      db.storageClass: gp3
+    capabilities:
+      apiVersions:
+        - ceph.rook.io/v1
+    asserts:
+      - equal:
+          path: spec.storage.storageClass
+          value: gp3
