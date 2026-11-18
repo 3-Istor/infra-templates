@@ -1,0 +1,29 @@
+{{- if and .Values.db.enabled .Values.db.pooler.enabled }}
+{{- $cluster := include "cnp-generic-app.dbClusterName" . }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Pooler
+metadata:
+  {{- /* Per generation, like the cluster: a restore switches the app to a new pooler too. */}}
+  name: {{ include "cnp-generic-app.dbPoolerName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cnp-generic-app.labels" . | nindent 4 }}
+  annotations:
+    # After the Cluster (-3), before the app pods that connect through it.
+    argocd.argoproj.io/sync-wave: "-2"
+spec:
+  cluster:
+    name: {{ $cluster }}
+  instances: {{ .Values.db.pooler.instances }}
+  type: rw
+  pgbouncer:
+    poolMode: {{ .Values.db.pooler.poolMode }}
+  template:
+    spec:
+      containers:
+        - name: pgbouncer
+          {{- with .Values.db.pooler.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

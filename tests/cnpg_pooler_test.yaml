@@ -1,0 +1,114 @@
+suite: cnpg pooler
+templates:
+  - templates/cnpg-pooler.yaml
+  - templates/deployment.yaml
+  - templates/migrations.yaml
+release:
+  name: shop-api-backend
+  namespace: shop-api
+set:
+  db.enabled: true
+  db.pooler.enabled: true
+tests:
+  - it: renders no pooler by default
+    template: templates/cnpg-pooler.yaml
+    set:
+      db.pooler.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders no pooler without a database
+    template: templates/cnpg-pooler.yaml
+    set:
+      db.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: puts a transaction pooler in front of the primary
+    template: templates/cnpg-pooler.yaml
+    asserts:
+      - isKind:
+          of: Pooler
+      - equal:
+          path: metadata.name
+          value: shop-api-backend-db-pooler
+      - equal:
+          path: spec.cluster.name
+          value: shop-api-backend-db
+      - equal:
+          path: spec.type
+          value: rw
+      - equal:
+          path: spec.pgbouncer.poolMode
+          value: transaction
+      - equal:
+          path: spec.instances
+          value: 1
+
+  - it: gives pgbouncer a memory limit equal to its request
+    template: templates/cnpg-pooler.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 64Mi
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 64Mi
+
+  - it: follows the restored cluster generation
+    template: templates/cnpg-pooler.yaml
+    set:
+      db.backup.enabled: true
+      db.restore.generation: 2
+      db.restore.sourceServer: shop-api-backend-db
+    asserts:
+      - equal:
+          path: metadata.name
+          value: shop-api-backend-db-r2-pooler
+      - equal:
+          path: spec.cluster.name
+          value: shop-api-backend-db-r2
+
+  - it: sends the app through the pooler
+    template: templates/deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DB_HOST
+            value: shop-api-backend-db-pooler
+
+  - it: keeps the app on the primary without the pooler
+    template: templates/deployment.yaml
+    set:
+      db.pooler.enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DB_HOST
+            value: shop-api-backend-db-rw
+
+  - it: keeps migrations on the primary
+    template: templates/migrations.yaml
+    set:
+      migrations.enabled: true
+      migrations.command: [alembic, upgrade, head]
+    documentSelector:
+      path: kind
+      value: Job
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DB_HOST
+            value: shop-api-backend-db-rw
+
+  - it: rejects an unknown pool mode
+    template: templates/cnpg-pooler.yaml
+    set:
+      db.pooler.poolMode: statement
+    asserts:
+      - failedTemplate: {}

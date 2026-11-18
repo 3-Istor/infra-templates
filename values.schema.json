@@ -124,6 +124,21 @@
         "endpointURL": { "type": "string", "pattern": "^https?://[^/?#@\\s]+/?$" }
       }
     },
+    "db": {
+      "type": "object",
+      "properties": {
+        "pooler": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "instances": { "type": "integer", "minimum": 1, "maximum": 3 },
+            "poolMode": { "enum": ["transaction", "session"] },
+            "resources": { "type": "object" }
+          }
+        }
+      }
+    },
     "links": {
       "type": "array",
       "items": {

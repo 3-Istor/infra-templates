@@ -72,6 +72,10 @@ generation's backups stay in one place.
 {{- end }}
 {{- end }}
 
+{{- define "cnp-generic-app.dbPoolerName" -}}
+{{- printf "%s-pooler" (include "cnp-generic-app.dbClusterName" .) }}
+{{- end }}
+
 {{/*
 Create chart name and version as used by the chart label.
 */}}
@@ -117,7 +121,9 @@ ConfigMap and Secret Rook derives from the claim.
 
 {{/*
 Env and envFrom shared by the app container and the migration Job, so both
-see the same database, bucket and secrets.
+see the same database, bucket and secrets. The migration Job passes directDB: DDL,
+advisory locks and session settings do not survive transaction pooling, so it
+always talks to the primary.
 */}}
 {{- define "cnp-generic-app.containerEnv" -}}
 {{- $tracing := .Values.tracing | default dict }}
@@ -128,7 +134,11 @@ env:
   - name: DB_TYPE
     value: postgres
   - name: DB_HOST
+    {{- if and .Values.db.pooler.enabled (not .directDB) }}
+    value: {{ include "cnp-generic-app.dbPoolerName" . }}
+    {{- else }}
     value: {{ printf "%s-rw" (include "cnp-generic-app.dbClusterName" .) }}
+    {{- end }}
   - name: DB_PORT
     value: "5432"
   - name: DB_NAME
