@@ -91,3 +91,55 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].image
           value: ghcr.io/3-istor/imports/shop/api@sha256:32ca39e021b327dcd74b283f131d72b3a7900b805aa1c77a277b88d7e5adf220
+
+  - it: accepts the image repositories of the deployed apps
+    set:
+      image.repository: ghcr.io/3-istor/optispace/backend
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: accepts a static template app image
+    set:
+      image.repository: ghcr.io/3-istor/my-app-bis
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: accepts an imported app image
+    set:
+      image.repository: ghcr.io/3-istor/imports/epitweet/social-graph-service
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: accepts an allowed Docker official image
+    set:
+      image.repository: docker.io/library/mongo
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: refuses an image outside the org registry
+    set:
+      image.repository: ghcr.io/someone-else/api
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses a Docker Hub image that is not an allowed official one
+    set:
+      image.repository: docker.io/someone/redis
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses a tag or digest smuggled into the repository
+    set:
+      image.repository: ghcr.io/3-istor/imports/other/api:latest
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses a path escaping the org namespace
+    set:
+      image.repository: ghcr.io/3-istor/../evil/api
+    asserts:
+      - failedTemplate: {}
