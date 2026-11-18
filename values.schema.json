@@ -114,6 +114,17 @@
         }
       }
     },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowFrom": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/definitions/dnsLabel" }
+        }
+      }
+    },
     "bucket": {
       "type": "object",
       "additionalProperties": false,

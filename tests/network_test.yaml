@@ -1,0 +1,135 @@
+suite: network
+templates:
+  - templates/network-policy.yaml
+  - templates/deployment.yaml
+  - templates/statefulset.yaml
+  - templates/cnpg-cluster.yaml
+  - templates/migrations.yaml
+release:
+  name: shop-api-backend
+  namespace: shop-api
+set:
+  cnp.project: shop
+  cnp.app: api
+  cnp.environment: prod
+tests:
+  - it: renders no policy when allowFrom is empty
+    template: templates/network-policy.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: refuses every project namespace but its own, the system one and the declared callers
+    template: templates/network-policy.yaml
+    set:
+      network.allowFrom: [web, worker]
+    asserts:
+      - isKind:
+          of: CiliumNetworkPolicy
+      - equal:
+          path: spec.endpointSelector.matchLabels
+          value:
+            app.kubernetes.io/name: cnp-generic-app
+            app.kubernetes.io/instance: shop-api-backend
+      - equal:
+          path: spec.ingressDeny[0].fromEndpoints[0].matchExpressions
+          value:
+            - key: k8s:io.cilium.k8s.namespace.labels.cnp.3istor.com/project
+              operator: In
+              values: [shop]
+            - key: k8s:io.kubernetes.pod.namespace
+              operator: NotIn
+              values: [shop-api, shop-system, shop-web, shop-worker]
+
+  - it: lets staging callers in from their staging namespaces
+    template: templates/network-policy.yaml
+    release:
+      name: shop-api-backend-stg
+      namespace: shop-api-stg
+    set:
+      cnp.environment: staging
+      environment: staging
+      network.allowFrom: [web]
+    asserts:
+      - equal:
+          path: spec.ingressDeny[0].fromEndpoints[0].matchExpressions[1].values
+          value: [shop-api-stg, shop-system, shop-web-stg]
+
+  - it: refuses an allowFrom without the ApplicationSet identity
+    template: templates/network-policy.yaml
+    set:
+      cnp: null
+      network.allowFrom: [web]
+    asserts:
+      - failedTemplate:
+          errorPattern: "network.allowFrom needs cnp.project"
+
+  - it: rejects an app name that is not a DNS label
+    template: templates/network-policy.yaml
+    set:
+      network.allowFrom: ["web.other-project"]
+    asserts:
+      - failedTemplate: {}
+
+  - it: marks the pods of a backing app
+    template: templates/statefulset.yaml
+    set:
+      cnp.type: backing
+      workload.kind: StatefulSet
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["cnp.3istor.com/role"]
+          value: backing
+
+  - it: does not mark the pods of other apps as backing
+    template: templates/deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.metadata.labels["cnp.3istor.com/role"]
+
+  - it: lets an app with a bucket reach the RGW
+    template: templates/deployment.yaml
+    set:
+      bucket.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["cnp.3istor.com/egress-rgw"]
+          value: "true"
+
+  - it: keeps an app without a bucket off the RGW
+    template: templates/deployment.yaml
+    set:
+      db.enabled: true
+      db.backup.enabled: true
+    asserts:
+      - notExists:
+          path: spec.template.metadata.labels["cnp.3istor.com/egress-rgw"]
+
+  - it: lets the migration Job of an app with a bucket reach the RGW
+    template: templates/migrations.yaml
+    set:
+      bucket.enabled: true
+      migrations.enabled: true
+      migrations.command: [migrate]
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["cnp.3istor.com/egress-rgw"]
+          value: "true"
+
+  - it: lets the database pods ship backups to the RGW
+    template: templates/cnpg-cluster.yaml
+    set:
+      db.enabled: true
+      db.backup.enabled: true
+    asserts:
+      - equal:
+          path: spec.inheritedMetadata.labels["cnp.3istor.com/egress-rgw"]
+          value: "true"
+
+  - it: leaves database pods without backups untouched
+    template: templates/cnpg-cluster.yaml
+    set:
+      db.enabled: true
+    asserts:
+      - notExists:
+          path: spec.inheritedMetadata

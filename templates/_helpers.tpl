@@ -108,6 +108,20 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Pod labels the project's network policies select on (cnp-project-base):
+backing marks a backing app's pods, set from cnp.type by the ApplicationSet;
+egress-rgw lets the pod reach the RGW through the default egress filter.
+*/}}
+{{- define "cnp-generic-app.networkLabels" -}}
+{{- if eq (dig "type" "" (.Values.cnp | default dict)) "backing" }}
+cnp.3istor.com/role: backing
+{{- end }}
+{{- if .Values.bucket.enabled }}
+cnp.3istor.com/egress-rgw: "true"
+{{- end }}
+{{- end }}
+
+{{/*
 Name of the app's ObjectBucketClaim or bucket VaultSecret, and of the
 ConfigMap and Secret Rook derives from the claim.
 */}}

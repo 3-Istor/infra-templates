@@ -97,7 +97,7 @@ tests:
     template: templates/cnpg-cluster.yaml
     asserts:
       - notExists:
-          path: spec.inheritedMetadata
+          path: spec.inheritedMetadata.annotations
 
   - it: cluster carries scrape annotations when db.metrics is on
     template: templates/cnpg-cluster.yaml
