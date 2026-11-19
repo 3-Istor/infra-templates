@@ -104,9 +104,9 @@
       "type": "object",
       "properties": {
         "repository": {
-          "description": "The org's GHCR (template apps under ghcr.io/3-istor/<app>, imports under ghcr.io/3-istor/imports/<project>) or an allowed Docker official image. Which project may run which org image needs cnp.*, which a schema cannot read: the Kyverno image policy checks that at admission. No tag or digest here: they go in image.tag and image.digest.",
+          "description": "Any registry. Org images (ghcr.io/3-istor/...) are limited to the project's own apps by the Kyverno image policy at admission, which a schema cannot do since it does not see cnp.*. No tag or digest here: they go in image.tag and image.digest.",
           "type": "string",
-          "pattern": "^(ghcr\\.io/3-istor(/[a-z0-9]+([._-][a-z0-9]+)*)+|docker\\.io/library/(elasticsearch|mongo|neo4j|redis|nginx))$"
+          "pattern": "^([a-z0-9]+([.-][a-z0-9]+)*(:[0-9]+)?/)?[a-z0-9]+([._-]+[a-z0-9]+)*(/[a-z0-9]+([._-]+[a-z0-9]+)*)*$"
         },
         "digest": {
           "type": "string",

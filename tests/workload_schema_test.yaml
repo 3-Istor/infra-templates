@@ -113,22 +113,37 @@ tests:
       - isKind:
           of: Deployment
 
-  - it: accepts an allowed Docker official image
+  - it: accepts a Docker official image
     set:
       image.repository: docker.io/library/mongo
     asserts:
       - isKind:
           of: Deployment
 
-  - it: refuses an image outside the org registry
+  - it: accepts a public image from another registry
     set:
-      image.repository: ghcr.io/someone-else/api
+      image.repository: quay.io/minio/minio
     asserts:
-      - failedTemplate: {}
+      - isKind:
+          of: Deployment
 
-  - it: refuses a Docker Hub image that is not an allowed official one
+  - it: accepts a Docker Hub short name
     set:
-      image.repository: docker.io/someone/redis
+      image.repository: rabbitmq
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: accepts a registry with a port
+    set:
+      image.repository: registry.example.com:5000/team/api
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: refuses a tag smuggled into a short name
+    set:
+      image.repository: "redis:7"
     asserts:
       - failedTemplate: {}
 
