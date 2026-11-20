@@ -70,4 +70,4 @@ tests:
     template: templates/service.yaml
     asserts:
       - failedTemplate:
-          errorPattern: environment "dev" is not one of prod, staging
+          errorPattern: "at '/environment': value must be one of"

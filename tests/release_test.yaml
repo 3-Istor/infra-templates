@@ -421,7 +421,7 @@ tests:
       release.strategy: blue-green
     asserts:
       - failedTemplate:
-          errorPattern: release.strategy "blue-green" is not one of
+          errorPattern: "at '/release/strategy': value must be one of"
 
   - it: refuses bluegreen until it is supported
     template: templates/rollout.yaml
@@ -437,7 +437,7 @@ tests:
       release.preset: yolo
     asserts:
       - failedTemplate:
-          errorPattern: release.preset "yolo" is not one of
+          errorPattern: "at '/release/preset': value must be one of"
 
   - it: refuses an unknown stickiness
     template: templates/rollout.yaml
@@ -445,7 +445,7 @@ tests:
       release.stickiness: header
     asserts:
       - failedTemplate:
-          errorPattern: release.stickiness "header" is not one of
+          errorPattern: "at '/release/stickiness': value must be one of"
 
   - it: refuses a canary without an HTTPRoute
     template: templates/rollout.yaml

@@ -1,0 +1,86 @@
+suite: hostname owner
+templates:
+  - templates/httproute.yaml
+  - templates/public-route.yaml
+release:
+  name: api
+  namespace: shop-api
+set:
+  cnp.project: shop
+  cnp.app: api
+  cnp.environment: prod
+  ingress.enabled: true
+tests:
+  - it: serves the app's own prod hostname
+    template: templates/httproute.yaml
+    set:
+      ingress.hostname: api-shop.3istor.com
+    asserts:
+      - equal:
+          path: spec.hostnames[0]
+          value: api-shop.3istor.com
+
+  - it: serves the app's own staging hostname in staging
+    template: templates/httproute.yaml
+    release:
+      namespace: shop-api-stg
+    set:
+      cnp.environment: staging
+      ingress.hostname: api-shop-staging.3istor.com
+    asserts:
+      - equal:
+          path: spec.hostnames[0]
+          value: api-shop-staging.3istor.com
+
+  - it: refuses the prod hostname in staging
+    template: templates/httproute.yaml
+    release:
+      namespace: shop-api-stg
+    set:
+      cnp.environment: staging
+      ingress.hostname: api-shop.3istor.com
+    asserts:
+      - failedTemplate:
+          errorPattern: is served at "api-shop-staging.3istor.com" only
+
+  - it: refuses the hostname of another app of the project
+    template: templates/httproute.yaml
+    set:
+      ingress.hostname: billing-shop.3istor.com
+    asserts:
+      - failedTemplate:
+          errorPattern: is not this app's hostname
+
+  - it: refuses a hostname of another project whose name ends like this one
+    template: templates/httproute.yaml
+    set:
+      ingress.hostname: api-big-shop.3istor.com
+    asserts:
+      - failedTemplate:
+          errorPattern: is not this app's hostname
+
+  - it: refuses the project's own Keycloak hostname
+    template: templates/httproute.yaml
+    set:
+      ingress.hostname: auth-shop.3istor.com
+    asserts:
+      - failedTemplate:
+          errorPattern: is not this app's hostname
+
+  - it: refuses a domain outside the platform's
+    template: templates/httproute.yaml
+    set:
+      ingress.hostname: api-shop.example.com
+    asserts:
+      - failedTemplate:
+          errorPattern: is not this app's hostname
+
+  - it: refuses another hostname on the public route too
+    template: templates/public-route.yaml
+    set:
+      ingress.hostname: billing-shop.3istor.com
+      ingress.publicPaths:
+        - path: /webhook
+    asserts:
+      - failedTemplate:
+          errorPattern: is not this app's hostname

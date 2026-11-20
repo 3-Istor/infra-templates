@@ -97,7 +97,7 @@ tests:
         - path: api
     asserts:
       - failedTemplate:
-          errorMessage: "ingress.publicPaths: path must start with /"
+          errorPattern: "at '/ingress/publicPaths/0/path'"
 
   - it: sends public traffic to the stable track under canary
     set:

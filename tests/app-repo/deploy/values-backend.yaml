@@ -1,0 +1,26 @@
+# A fullstack app repository as app-templates writes it, for ci/check-app-values.sh.
+project_name: "sandbox"
+app_name: "demo-app"
+image:
+  repository: ghcr.io/3-istor/demo-app/backend
+  tag: "sha-1234567"
+service:
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+secrets:
+  enabled: true
+  keys: [STRIPE_API_KEY]
+db:
+  enabled: true
+  name: demo_app
+migrations:
+  enabled: true
+  command: ["/app/migrate"]
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 256Mi

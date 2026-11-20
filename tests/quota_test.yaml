@@ -1,0 +1,53 @@
+suite: namespace quota
+templates:
+  - templates/quota-report.yaml
+release:
+  name: api
+  namespace: shop-api
+tests:
+  - it: accepts the chart defaults
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: counts the rollout surge on top of the replicas
+    set:
+      replicaCount: 4
+      resources.requests.cpu: 250m
+    asserts:
+      - failedTemplate:
+          errorPattern: "needs up to cpu=1250m memory=640Mi pods=5 "
+
+  - it: counts a full second set of pods while a canary reaches all the traffic
+    set:
+      release.strategy: canary
+      ingress.enabled: true
+      replicaCount: 3
+      resources.requests.memory: 384Mi
+    asserts:
+      - failedTemplate:
+          errorPattern: "needs up to cpu=610m memory=2320Mi pods=7 "
+
+  - it: counts the migration Job, the database and its pooler
+    set:
+      db.enabled: true
+      db.pooler.enabled: true
+      migrations.enabled: true
+      migrations.command: ["/app/migrate"]
+      migrations.resources.requests: {cpu: "1", memory: 1Gi}
+    asserts:
+      - failedTemplate:
+          errorPattern: "needs up to cpu=1160m memory=1344Mi pods=4 "
+
+  - it: reads cores and decimal memory units
+    set:
+      resources.requests: {cpu: "0.6", memory: 1G}
+    asserts:
+      - failedTemplate:
+          errorPattern: "needs up to cpu=1200m memory=1908Mi pods=2 "
+
+  - it: fits a release that uses the whole quota exactly
+    set:
+      replicaCount: 4
+      resources.requests.cpu: 200m
+    asserts:
+      - notFailedTemplate: {}

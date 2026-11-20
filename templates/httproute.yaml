@@ -1,4 +1,5 @@
 {{- if .Values.ingress.enabled }}
+{{- include "cnp-generic-app.checkHostname" . }}
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:

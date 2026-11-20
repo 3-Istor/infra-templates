@@ -398,6 +398,7 @@ A digest wins over the tag: the CMP pins imported images by digest, the image
 updater keeps writing tags for template apps.
 */}}
 {{- define "cnp-generic-app.image" -}}
+{{- include "cnp-generic-app.checkImageOwner" . }}
 {{- with .Values.image.digest }}
 {{- printf "%s@%s" $.Values.image.repository . }}
 {{- else }}
@@ -465,4 +466,146 @@ always the derived one. Called with (list $ctx "<feature>"); use with fromJson.
 {{- end }}
 {{- end }}
 {{- dict "path" $path "role" $owner.vaultRole | toJson }}
+{{- end }}
+
+{{/*
+Same rule as the Kyverno policy restrict-tenant-images (K3s), checked at
+render time so the app's CI refuses the values before Argo CD syncs them:
+ghcr.io/3-istor holds every project's private images and every node can pull
+them. Org images must be the app's own (ghcr.io/3-istor/<app>[/...], named
+after the app's repository) or its project's imports. Without cnp.* (a bare
+helm template) there is no owner to compare with.
+*/}}
+{{- define "cnp-generic-app.checkImageOwner" -}}
+{{- $cnp := .Values.cnp | default dict }}
+{{- if and $cnp.project $cnp.app }}
+{{- $repository := regexReplaceAll "^([^/]+):[0-9]+/" (.Values.image.repository | toString | lower) "${1}/" }}
+{{- $own := and (ne $cnp.app "imports") (or (eq $repository (printf "ghcr.io/3-istor/%s" $cnp.app)) (hasPrefix (printf "ghcr.io/3-istor/%s/" $cnp.app) $repository)) }}
+{{- $imported := hasPrefix (printf "ghcr.io/3-istor/imports/%s/" $cnp.project) $repository }}
+{{- if and (hasPrefix "ghcr.io/3-istor/" $repository) (not (or $own $imported)) }}
+{{- fail (printf "image.repository %q belongs to another app: org images must be ghcr.io/3-istor/%s[/...] or ghcr.io/3-istor/imports/%s/..." .Values.image.repository $cnp.app $cnp.project) }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Kubernetes CPU quantity in millicores. values.schema.json keeps resources to
+the forms parsed here (100m, 1, 0.5).
+*/}}
+{{- define "cnp-generic-app.milliCPU" -}}
+{{- $q := toString . }}
+{{- if hasSuffix "m" $q }}{{ trimSuffix "m" $q | float64 | ceil | int }}{{ else }}{{ mulf (float64 $q) 1000 | ceil | int }}{{ end }}
+{{- end }}
+
+{{/*
+Kubernetes memory quantity in MiB, rounded up.
+*/}}
+{{- define "cnp-generic-app.memoryMi" -}}
+{{- $q := toString . }}
+{{- $units := dict "Ki" 0.0009765625 "Mi" 1.0 "Gi" 1024.0 "Ti" 1048576.0 "k" 0.00095367431640625 "M" 0.95367431640625 "G" 953.67431640625 "T" 953674.31640625 }}
+{{- $unit := regexFind "[KMGTk]i?$" $q }}
+{{- $number := trimSuffix $unit $q | float64 }}
+{{- if $unit }}{{ mulf $number (get $units $unit) | ceil | int }}{{ else }}{{ divf $number 1048576 | ceil | int }}{{ end }}
+{{- end }}
+
+{{/*
+Requests of one container, the LimitRange defaults (cnp-project-base
+namespace.yaml) filling what it leaves out. Returns {cpu: millicores, memory: MiB}.
+*/}}
+{{- define "cnp-generic-app.podRequests" -}}
+{{- $requests := (. | default dict).requests | default dict }}
+{{- dict
+  "cpu" (include "cnp-generic-app.milliCPU" ($requests.cpu | default "50m") | int)
+  "memory" (include "cnp-generic-app.memoryMi" ($requests.memory | default "128Mi") | int)
+  | toJson }}
+{{- end }}
+
+{{/*
+What this release asks of its namespace at its peak, as {cpu, memory, pods}:
+the app's replicas plus the larger of a rollout's extra pods (25% surge, or a
+full second set while a canary reaches 100%) and the migration Job, which
+runs before the rollout while the old pods are up; then the database
+instances, the pooler and the per-release tunnel. Each app namespace has the
+same ResourceQuota (cnp-project-base namespace.yaml), mirrored in
+cnp-generic-app.quota: a release that cannot fit in it alone is refused at
+render time, before Argo CD syncs anything. A fullstack app has two releases
+in one namespace; its CI adds both reports (templates/quota-report.yaml).
+*/}}
+{{- define "cnp-generic-app.quotaUsage" -}}
+{{- $app := include "cnp-generic-app.podRequests" .Values.resources | fromJson }}
+{{- $replicas := int (.Values.replicaCount | default 1) }}
+{{- if and .Values.autoscaling .Values.autoscaling.enabled }}
+{{- $replicas = int (.Values.autoscaling.maxReplicas | default 1) }}
+{{- end }}
+{{- $extra := 0 }}
+{{- if include "cnp-generic-app.isStatefulSet" . }}
+{{- $replicas = 1 }}
+{{- else if include "cnp-generic-app.isCanary" . }}
+{{- $extra = $replicas }}
+{{- else }}
+{{- $extra = div (add $replicas 3) 4 | int }}
+{{- end }}
+{{- $cpu := mul $replicas $app.cpu }}
+{{- $memory := mul $replicas $app.memory }}
+{{- $pods := $replicas }}
+{{- $extraCPU := mul $extra $app.cpu }}
+{{- $extraMemory := mul $extra $app.memory }}
+{{- $extraPods := $extra }}
+{{- if .Values.migrations.enabled }}
+{{- $job := include "cnp-generic-app.podRequests" (.Values.migrations.resources | default .Values.resources) | fromJson }}
+{{- $extraCPU = max $extraCPU $job.cpu }}
+{{- $extraMemory = max $extraMemory $job.memory }}
+{{- $extraPods = max $extraPods 1 }}
+{{- end }}
+{{- $cpu = add $cpu $extraCPU }}
+{{- $memory = add $memory $extraMemory }}
+{{- $pods = add $pods $extraPods }}
+{{- if .Values.db.enabled }}
+{{- $instances := int (.Values.db.instances | default 1) }}
+{{- $instance := include "cnp-generic-app.podRequests" dict | fromJson }}
+{{- $cpu = add $cpu (mul $instances $instance.cpu) }}
+{{- $memory = add $memory (mul $instances $instance.memory) }}
+{{- $pods = add $pods $instances }}
+{{- if (.Values.db.pooler | default dict).enabled }}
+{{- $poolers := int (.Values.db.pooler.instances | default 1) }}
+{{- $pooler := include "cnp-generic-app.podRequests" .Values.db.pooler.resources | fromJson }}
+{{- $cpu = add $cpu (mul $poolers $pooler.cpu) }}
+{{- $memory = add $memory (mul $poolers $pooler.memory) }}
+{{- $pods = add $pods $poolers }}
+{{- end }}
+{{- end }}
+{{- if and .Values.ingress.enabled .Values.ingress.tunnel.perRelease }}
+{{- $cpu = add $cpu 10 }}
+{{- $memory = add $memory 16 }}
+{{- $pods = add $pods 1 }}
+{{- end }}
+{{- dict "cpu" $cpu "memory" $memory "pods" $pods | toJson }}
+{{- end }}
+
+{{/*
+The ResourceQuota of every app namespace, from cnp-project-base
+templates/namespace.yaml: requests.cpu 1, requests.memory 2Gi, pods 10.
+Constants on purpose: a value would let the app raise its own ceiling.
+*/}}
+{{- define "cnp-generic-app.quota" -}}
+{{- dict "cpu" 1000 "memory" 2048 "pods" 10 | toJson }}
+{{- end }}
+
+{{/*
+The app's route may only carry its own hostname: <app>-<project>.3istor.com,
+or <app>-<project>-staging.3istor.com in staging, as the CMP derives them
+(registry_names, environments/layout). An exact name rather than a
+*-<project> suffix: project names contain dashes, so iot could otherwise
+claim shop-b-iot.3istor.com of project b-iot, and its own auth-, status- and
+offhours- hostnames. Without cnp.* (a bare helm template) there is no owner
+to compare with.
+*/}}
+{{- define "cnp-generic-app.checkHostname" -}}
+{{- $cnp := .Values.cnp | default dict }}
+{{- if and $cnp.project $cnp.app $cnp.environment .Values.ingress.hostname }}
+{{- $expected := printf "%s-%s%s.3istor.com" $cnp.app $cnp.project (ternary "-staging" "" (eq $cnp.environment "staging")) }}
+{{- if ne (lower (toString .Values.ingress.hostname)) $expected }}
+{{- fail (printf "ingress.hostname %q is not this app's hostname: %s/%s in %s is served at %q only" .Values.ingress.hostname $cnp.project $cnp.app $cnp.environment $expected) }}
+{{- end }}
+{{- end }}
 {{- end }}

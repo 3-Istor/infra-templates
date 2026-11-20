@@ -14,6 +14,7 @@ cnp:
   project: ""
   app: ""
   environment: ""
+  type: ""
 
 # prod or staging. Set by the app's deploy/env/staging/<component>.yaml, never
 # for prod: prod renders exactly as it did before environments existed. Staging
@@ -75,6 +76,9 @@ secrets:
   # Optional. Always rendered as <cnp.project>-<cnp.app>[-staging]-role; any
   # other value fails the render.
   vaultRole: ""
+  # Names the app expects in its Vault path, never their values. The CMP lists
+  # the missing ones with a link to Vault.
+  keys: []
 
 # One app-registry VaultSecret per namespace: set false on all but one release sharing it (fullstack frontend).
 registrySecret:
