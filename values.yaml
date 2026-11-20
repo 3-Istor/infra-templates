@@ -146,6 +146,22 @@ db:
     retentionPolicy: "7d"
     endpointURL: http://192.168.1.110:7480
 
+  # CNPG Pooler (PgBouncer) in front of the primary. When enabled the app's
+  # DB_HOST is the pooler; the migration Job still connects to the primary.
+  # transaction mode breaks session state (prepared statements without
+  # protocol support, SET, LISTEN, advisory locks): use session for such apps.
+  pooler:
+    enabled: false
+    instances: 1
+    poolMode: transaction
+    # Limit equal to request for memory (Kyverno require-resources-and-memory-limits).
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        memory: 64Mi
+
   # Written by the CMP's restore button, not by hand. Bumping generation
   # creates a new cluster recovered from the backups of sourceServer (the
   # cluster name a backup was taken from) and switches the app to it; Argo CD

@@ -85,7 +85,7 @@ spec:
         imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
         command:
           {{- toYaml $command | nindent 10 }}
-        {{- include "cnp-generic-app.containerEnv" . | trim | nindent 8 }}
+        {{- include "cnp-generic-app.containerEnv" (merge (dict "directDB" true) .) | trim | nindent 8 }}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
