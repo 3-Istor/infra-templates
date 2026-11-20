@@ -590,3 +590,22 @@ Constants on purpose: a value would let the app raise its own ceiling.
 {{- define "cnp-generic-app.quota" -}}
 {{- dict "cpu" 1000 "memory" 2048 "pods" 10 | toJson }}
 {{- end }}
+
+{{/*
+The app's route may only carry its own hostname: <app>-<project>.3istor.com,
+or <app>-<project>-staging.3istor.com in staging, as the CMP derives them
+(registry_names, environments/layout). An exact name rather than a
+*-<project> suffix: project names contain dashes, so iot could otherwise
+claim shop-b-iot.3istor.com of project b-iot, and its own auth-, status- and
+offhours- hostnames. Without cnp.* (a bare helm template) there is no owner
+to compare with.
+*/}}
+{{- define "cnp-generic-app.checkHostname" -}}
+{{- $cnp := .Values.cnp | default dict }}
+{{- if and $cnp.project $cnp.app $cnp.environment .Values.ingress.hostname }}
+{{- $expected := printf "%s-%s%s.3istor.com" $cnp.app $cnp.project (ternary "-staging" "" (eq $cnp.environment "staging")) }}
+{{- if ne (lower (toString .Values.ingress.hostname)) $expected }}
+{{- fail (printf "ingress.hostname %q is not this app's hostname: %s/%s in %s is served at %q only" .Values.ingress.hostname $cnp.project $cnp.app $cnp.environment $expected) }}
+{{- end }}
+{{- end }}
+{{- end }}
