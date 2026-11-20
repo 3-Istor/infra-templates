@@ -1,0 +1,9 @@
+environment: staging
+image:
+  repository: ghcr.io/3-istor/demo-app/backend
+  tag: 1.0.0-rc.1
+offhours:
+  enabled: true
+  sleepAt: 0 23 * * 1-5
+  wakeAt: 0 8 * * 1-5
+  timezone: Europe/Paris

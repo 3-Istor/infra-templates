@@ -9,6 +9,7 @@ set:
   cnp.project: shop
   cnp.app: api
   cnp.environment: prod
+  image.repository: ghcr.io/3-istor/api/backend
   bucket.enabled: true
 tests:
   - it: renders nothing by default

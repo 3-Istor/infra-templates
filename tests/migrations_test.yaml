@@ -102,7 +102,7 @@ tests:
       migrations.timeout: 5 minutes
     asserts:
       - failedTemplate:
-          errorPattern: must be a number followed by s, m or h
+          errorPattern: "at '/migrations/timeout'"
 
   - it: refuses migrations without a command
     set:

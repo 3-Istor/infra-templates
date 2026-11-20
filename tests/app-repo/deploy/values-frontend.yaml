@@ -1,0 +1,19 @@
+project_name: "sandbox"
+app_name: "demo-app"
+image:
+  repository: ghcr.io/3-istor/demo-app/frontend
+  tag: "sha-1234567"
+registrySecret:
+  create: false
+ingress:
+  enabled: true
+  hostname: demo-app-sandbox.3istor.com
+  sso_protected: true
+  tunnel:
+    perRelease: false
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 128Mi

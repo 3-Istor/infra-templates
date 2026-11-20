@@ -1,0 +1,70 @@
+suite: image owner
+templates:
+  - templates/deployment.yaml
+release:
+  name: shop-api-backend
+  namespace: shop-api
+set:
+  cnp.project: shop
+  cnp.app: api
+  cnp.environment: prod
+tests:
+  - it: accepts the app's own image
+    set:
+      image.repository: ghcr.io/3-istor/api/backend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/3-istor/api/backend:latest
+
+  - it: accepts an image the project imported
+    set:
+      image.repository: ghcr.io/3-istor/imports/shop/api
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: accepts a public image
+    set:
+      image.repository: docker.io/library/redis
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: refuses the image of another app of the org
+    set:
+      image.repository: ghcr.io/3-istor/billing/backend
+    asserts:
+      - failedTemplate:
+          errorPattern: belongs to another app
+
+  - it: refuses an app whose name only starts like the app's
+    set:
+      image.repository: ghcr.io/3-istor/api-internal/backend
+    asserts:
+      - failedTemplate:
+          errorPattern: belongs to another app
+
+  - it: refuses another project's imported image
+    set:
+      image.repository: ghcr.io/3-istor/imports/bank/api
+    asserts:
+      - failedTemplate:
+          errorPattern: belongs to another app
+
+  - it: refuses the org registry behind an explicit port
+    set:
+      image.repository: ghcr.io:443/3-istor/billing/backend
+    asserts:
+      - failedTemplate:
+          errorPattern: belongs to another app
+
+  - it: refuses every imported image to an app named imports
+    release:
+      namespace: shop-imports
+    set:
+      cnp.app: imports
+      image.repository: ghcr.io/3-istor/imports/bank/api
+    asserts:
+      - failedTemplate:
+          errorPattern: belongs to another app

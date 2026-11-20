@@ -27,6 +27,10 @@ ingress:
   tunnel:
     image: cloudflare/cloudflared:latest
 
+# The app's own image: the chart default belongs to the template repository.
+image:
+  repository: ghcr.io/3-istor/demo-app/backend
+
 secrets:
   enabled: true
   vaultPath: project-sandbox/demo-app

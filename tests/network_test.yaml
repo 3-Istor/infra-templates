@@ -12,6 +12,7 @@ set:
   cnp.project: shop
   cnp.app: api
   cnp.environment: prod
+  image.repository: ghcr.io/3-istor/api/backend
 tests:
   - it: renders no policy when allowFrom is empty
     template: templates/network-policy.yaml

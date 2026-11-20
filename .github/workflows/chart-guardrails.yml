@@ -33,6 +33,9 @@ jobs:
             || helm plugin install https://github.com/helm-unittest/helm-unittest.git --version v1.2.1
           helm unittest .
 
+      - name: App repository values check
+        run: ci/check-app-values.sh tests/app-repo demo-app
+
       - name: Install kubeconform
         run: |
           curl -sSLo "$RUNNER_TEMP/kubeconform.tar.gz" \

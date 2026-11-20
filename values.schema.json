@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "cnp-generic-app values",
-  "description": "Bounds what imported apps add (D16): the workload block, links, the image repository and digest, and what reaches the pod from values a project admin edits in the CMP: probes, podAnnotations, metrics and tracing. Everything else stays free so existing values files keep rendering.",
+  "description": "Closed: a key the chart does not know is refused, so a typo or a value meant for another tool fails the app's CI and Argo CD's render instead of being silently ignored. Bounds what the app repository and the CMP write (same file, same rules): identity and Vault access derive from cnp.* only, resources keep to the quantities the quota check parses, schedules and enums are closed. What a schema cannot see (image of another app, namespace quota) is checked at render time in templates/_helpers.tpl.",
   "type": "object",
   "definitions": {
     "dnsLabel": {
@@ -12,35 +12,73 @@
     },
     "stringList": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string"
+      }
     },
     "seccompProfile": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "properties": {
-        "type": { "enum": ["RuntimeDefault"] }
+        "type": {
+          "enum": [
+            "RuntimeDefault"
+          ]
+        }
       }
     },
     "probeHandler": {
       "description": "A probe aims at the pod itself: host would turn the kubelet into a proxy towards any address.",
       "type": "object",
-      "not": { "required": ["host"] }
+      "not": {
+        "required": [
+          "host"
+        ]
+      }
     },
     "probe": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "httpGet": { "$ref": "#/definitions/probeHandler" },
-        "tcpSocket": { "$ref": "#/definitions/probeHandler" },
-        "grpc": { "type": "object" },
-        "exec": { "type": "object" },
-        "initialDelaySeconds": { "type": "integer", "minimum": 0 },
-        "periodSeconds": { "type": "integer", "minimum": 1 },
-        "timeoutSeconds": { "type": "integer", "minimum": 1 },
-        "successThreshold": { "type": "integer", "minimum": 1 },
-        "failureThreshold": { "type": "integer", "minimum": 1 },
-        "terminationGracePeriodSeconds": { "type": "integer", "minimum": 1 }
+        "httpGet": {
+          "$ref": "#/definitions/probeHandler"
+        },
+        "tcpSocket": {
+          "$ref": "#/definitions/probeHandler"
+        },
+        "grpc": {
+          "type": "object"
+        },
+        "exec": {
+          "type": "object"
+        },
+        "initialDelaySeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "successThreshold": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "failureThreshold": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "terminationGracePeriodSeconds": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "toggledProbe": {
@@ -48,56 +86,313 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "enabled": { "type": "boolean" },
-        "httpGet": { "$ref": "#/definitions/probeHandler" },
-        "tcpSocket": { "$ref": "#/definitions/probeHandler" },
-        "grpc": { "type": "object" },
-        "exec": { "type": "object" },
-        "initialDelaySeconds": { "type": "integer", "minimum": 0 },
-        "periodSeconds": { "type": "integer", "minimum": 1 },
-        "timeoutSeconds": { "type": "integer", "minimum": 1 },
-        "successThreshold": { "type": "integer", "minimum": 1 },
-        "failureThreshold": { "type": "integer", "minimum": 1 },
-        "terminationGracePeriodSeconds": { "type": "integer", "minimum": 1 }
-      }
-    }
-  },
-  "properties": {
-    "livenessProbe": { "$ref": "#/definitions/toggledProbe" },
-    "readinessProbe": { "$ref": "#/definitions/toggledProbe" },
-    "startupProbe": { "$ref": "#/definitions/toggledProbe" },
-    "podAnnotations": {
-      "description": "String values only: a number or a boolean would pass the render and fail at apply time.",
-      "type": "object",
-      "additionalProperties": { "type": "string" }
-    },
-    "metrics": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "path": { "type": "string", "pattern": "^/[^\\s]*$" },
-        "port": {
-          "anyOf": [
-            { "type": "integer", "minimum": 1, "maximum": 65535 },
-            { "type": "string", "pattern": "^[0-9]*$" }
-          ]
+        "enabled": {
+          "type": "boolean"
+        },
+        "httpGet": {
+          "$ref": "#/definitions/probeHandler"
+        },
+        "tcpSocket": {
+          "$ref": "#/definitions/probeHandler"
+        },
+        "grpc": {
+          "type": "object"
+        },
+        "exec": {
+          "type": "object"
+        },
+        "initialDelaySeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "successThreshold": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "failureThreshold": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "terminationGracePeriodSeconds": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     },
-    "tracing": {
+    "cpuQuantity": {
+      "description": "Millicores (100m) or cores (1, 0.5): the forms the quota check parses.",
+      "anyOf": [
+        {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        {
+          "type": "string",
+          "pattern": "^([0-9]+m|[0-9]+(\\.[0-9]{1,3})?)$"
+        }
+      ]
+    },
+    "memoryQuantity": {
+      "description": "Bytes or a binary/decimal suffix (128Mi, 1Gi, 500M): the forms the quota check parses.",
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|k|M|G|T)?$"
+        }
+      ]
+    },
+    "resourceList": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "enabled": { "type": "boolean" },
-        "endpoint": { "type": "string", "pattern": "^https?://[^\\s]+$" },
-        "sampleRatio": {
-          "anyOf": [
-            { "type": "number", "minimum": 0, "maximum": 1 },
-            { "type": "string", "pattern": "^(0(\\.[0-9]+)?|1(\\.0+)?)$" }
+        "cpu": {
+          "$ref": "#/definitions/cpuQuantity"
+        },
+        "memory": {
+          "$ref": "#/definitions/memoryQuantity"
+        },
+        "ephemeral-storage": {
+          "$ref": "#/definitions/memoryQuantity"
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requests": {
+          "$ref": "#/definitions/resourceList"
+        },
+        "limits": {
+          "$ref": "#/definitions/resourceList"
+        }
+      }
+    },
+    "cron": {
+      "description": "Five fields, as offhours-guard reads them.",
+      "type": "string",
+      "pattern": "^\\s*\\S+(\\s+\\S+){4}\\s*$"
+    },
+    "envName": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"
+    },
+    "freeObject": {
+      "description": "Accepted and not rendered by the chart: kept so existing values files still render.",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "project_name": {
+      "type": "string"
+    },
+    "app_name": {
+      "type": "string"
+    },
+    "cnp": {
+      "description": "Set by the cnp-apps ApplicationSet as Helm parameters, which win over every values file.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "project": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "environment": {
+          "enum": [
+            "",
+            "prod",
+            "staging"
           ]
         },
-        "serviceName": { "type": "string", "pattern": "^[a-zA-Z0-9._-]*$" }
+        "type": {
+          "enum": [
+            "",
+            "static",
+            "fullstack",
+            "service",
+            "backing"
+          ]
+        },
+        "quotaReport": {
+          "description": "CI only: print this release's peak requests (templates/quota-report.yaml).",
+          "type": "boolean"
+        }
+      }
+    },
+    "environment": {
+      "enum": [
+        "prod",
+        "staging"
+      ]
+    },
+    "nameOverride": {
+      "type": "string"
+    },
+    "fullnameOverride": {
+      "type": "string"
+    },
+    "namespace": {
+      "type": "string"
+    },
+    "replicaCount": {
+      "description": "At most the namespace quota's 10 pods.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "hostname": {
+          "type": "string",
+          "pattern": "^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)+)?$"
+        },
+        "sso_protected": {
+          "type": "boolean"
+        },
+        "realm": {
+          "type": "string"
+        },
+        "allowedGroups": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "publicPaths": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^/[^\\s]*$"
+              },
+              "method": {
+                "enum": [
+                  "GET",
+                  "HEAD",
+                  "POST",
+                  "PUT",
+                  "PATCH",
+                  "DELETE",
+                  "OPTIONS"
+                ]
+              },
+              "match": {
+                "enum": [
+                  "Exact",
+                  "PathPrefix"
+                ]
+              }
+            }
+          }
+        },
+        "gateway": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "$ref": "#/definitions/dnsLabel"
+            },
+            "namespace": {
+              "$ref": "#/definitions/dnsLabel"
+            }
+          }
+        },
+        "oidc": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "baseURL": {
+              "type": "string",
+              "pattern": "^https://[^\\s]+$"
+            },
+            "issuer": {
+              "type": "string",
+              "pattern": "^(https://[^\\s]+)?$"
+            },
+            "clientID": {
+              "type": "string"
+            }
+          }
+        },
+        "tunnel": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "perRelease": {
+              "type": "boolean"
+            },
+            "image": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "vaultPath": {
+          "type": "string"
+        },
+        "vaultRole": {
+          "type": "string"
+        },
+        "keys": {
+          "description": "Names of the secrets the app expects in its Vault path, never their values: the CMP lists the missing ones with a link to Vault.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+          }
+        }
+      }
+    },
+    "registrySecret": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": {
+          "type": "boolean"
+        },
+        "scope": {
+          "enum": [
+            "app",
+            "project"
+          ]
+        }
       }
     },
     "image": {
@@ -108,9 +403,400 @@
           "type": "string",
           "pattern": "^([a-z0-9]+([.-][a-z0-9]+)*(:[0-9]+)?/)?[a-z0-9]+([._-]+[a-z0-9]+)*(/[a-z0-9]+([._-]+[a-z0-9]+)*)*$"
         },
+        "pullPolicy": {
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        },
+        "tag": {
+          "type": [
+            "string",
+            "number"
+          ]
+        },
         "digest": {
           "type": "string",
           "pattern": "^(sha256:[a-f0-9]{64})?$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/definitions/dnsLabel"
+          }
+        }
+      }
+    },
+    "db": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^([a-z_][a-z0-9_-]*)?$"
+        },
+        "storage": {
+          "type": "string",
+          "pattern": "^[0-9]+(Mi|Gi)$"
+        },
+        "storageClass": {
+          "type": "string"
+        },
+        "imageName": {
+          "type": "string"
+        },
+        "instances": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "metrics": {
+          "type": "boolean"
+        },
+        "backup": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "keepAfterDelete": {
+              "type": "boolean"
+            },
+            "bucket": {
+              "enum": [
+                "rook",
+                "vault"
+              ]
+            },
+            "schedule": {
+              "description": "Six fields, seconds first, as CNPG's ScheduledBackup reads them.",
+              "type": "string",
+              "pattern": "^\\s*\\S+(\\s+\\S+){5}\\s*$"
+            },
+            "retentionPolicy": {
+              "type": "string",
+              "pattern": "^[0-9]+[dwm]$"
+            },
+            "endpointURL": {
+              "type": "string",
+              "pattern": "^https?://[^/?#@\\s]+/?$"
+            }
+          }
+        },
+        "pooler": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "instances": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3
+            },
+            "poolMode": {
+              "enum": [
+                "transaction",
+                "session"
+              ]
+            },
+            "resources": {
+              "$ref": "#/definitions/resources"
+            }
+          }
+        },
+        "restore": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "generation": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sourceServer": {
+              "type": "string"
+            },
+            "backupID": {
+              "type": "string"
+            },
+            "targetTime": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "migrations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "command": {
+          "$ref": "#/definitions/stringList"
+        },
+        "backupBefore": {
+          "type": "boolean"
+        },
+        "timeout": {
+          "type": "string",
+          "pattern": "^[0-9]+[smh]$"
+        },
+        "resources": {
+          "$ref": "#/definitions/resources"
+        }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {
+          "enum": [
+            "rolling",
+            "canary",
+            "bluegreen"
+          ]
+        },
+        "preset": {
+          "enum": [
+            "safe",
+            "fast",
+            "demo",
+            "manual"
+          ]
+        },
+        "stickiness": {
+          "enum": [
+            "none",
+            "cookie"
+          ]
+        },
+        "smoke": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^/[^\\s]*$"
+            }
+          }
+        },
+        "analysis": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "errorRateMax": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "minRequests": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "allowForce": {
+          "type": "boolean"
+        }
+      }
+    },
+    "podAnnotations": {
+      "description": "String values only: a number or a boolean would pass the render and fail at apply time.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "podLabels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "podSecurityContext": {
+      "$ref": "#/definitions/freeObject"
+    },
+    "securityContext": {
+      "$ref": "#/definitions/freeObject"
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "Deployment",
+            "StatefulSet"
+          ]
+        },
+        "command": {
+          "$ref": "#/definitions/stringList"
+        },
+        "args": {
+          "$ref": "#/definitions/stringList"
+        },
+        "probes": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "liveness": {
+              "$ref": "#/definitions/probe"
+            },
+            "readiness": {
+              "$ref": "#/definitions/probe"
+            },
+            "startup": {
+              "$ref": "#/definitions/probe"
+            }
+          }
+        },
+        "securityContext": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "privileged": {
+              "const": false
+            },
+            "allowPrivilegeEscalation": {
+              "const": false
+            },
+            "runAsNonRoot": {
+              "const": true
+            },
+            "runAsUser": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "runAsGroup": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "readOnlyRootFilesystem": {
+              "type": "boolean"
+            },
+            "seccompProfile": {
+              "$ref": "#/definitions/seccompProfile"
+            },
+            "capabilities": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "drop": {
+                  "$ref": "#/definitions/stringList"
+                },
+                "add": {
+                  "type": "array",
+                  "maxItems": 0
+                }
+              }
+            }
+          }
+        },
+        "podSecurityContext": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "runAsNonRoot": {
+              "const": true
+            },
+            "runAsUser": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "runAsGroup": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "fsGroup": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "fsGroupChangePolicy": {
+              "enum": [
+                "Always",
+                "OnRootMismatch"
+              ]
+            },
+            "supplementalGroups": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "seccompProfile": {
+              "$ref": "#/definitions/seccompProfile"
+            }
+          }
+        },
+        "tmpDirs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^/[^\\s]*$"
+          }
+        },
+        "persistence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mountPath": {
+              "type": "string",
+              "pattern": "^/[^\\s]*$"
+            },
+            "size": {
+              "type": "string",
+              "pattern": "^[0-9]+(Mi|Gi)$"
+            },
+            "storageClass": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "bucket": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "mode": {
+          "enum": [
+            "rook",
+            "vault"
+          ]
+        },
+        "storageClass": {
+          "enum": [
+            "ceph-bucket-retain",
+            "ceph-bucket"
+          ]
+        },
+        "endpointURL": {
+          "type": "string",
+          "pattern": "^https?://[^/?#@\\s]+/?$"
         }
       }
     },
@@ -121,31 +807,8 @@
         "allowFrom": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/definitions/dnsLabel" }
-        }
-      }
-    },
-    "bucket": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "mode": { "enum": ["rook", "vault"] },
-        "storageClass": { "enum": ["ceph-bucket-retain", "ceph-bucket"] },
-        "endpointURL": { "type": "string", "pattern": "^https?://[^/?#@\\s]+/?$" }
-      }
-    },
-    "db": {
-      "type": "object",
-      "properties": {
-        "pooler": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "enabled": { "type": "boolean" },
-            "instances": { "type": "integer", "minimum": 1, "maximum": 3 },
-            "poolMode": { "enum": ["transaction", "session"] },
-            "resources": { "type": "object" }
+          "items": {
+            "$ref": "#/definitions/dnsLabel"
           }
         }
       }
@@ -155,83 +818,315 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["app", "port"],
+        "required": [
+          "app",
+          "port"
+        ],
         "properties": {
-          "app": { "$ref": "#/definitions/dnsLabel" },
+          "app": {
+            "$ref": "#/definitions/dnsLabel"
+          },
           "alias": {
             "allOf": [
-              { "$ref": "#/definitions/dnsLabel" },
-              { "not": { "enum": ["kubernetes", "default", "vault", "keycloak", "argocd"] } }
+              {
+                "$ref": "#/definitions/dnsLabel"
+              },
+              {
+                "not": {
+                  "enum": [
+                    "kubernetes",
+                    "default",
+                    "vault",
+                    "keycloak",
+                    "argocd"
+                  ]
+                }
+              }
             ]
           },
-          "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          }
         }
       }
     },
-    "workload": {
+    "service": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "kind": { "enum": ["Deployment", "StatefulSet"] },
-        "command": { "$ref": "#/definitions/stringList" },
-        "args": { "$ref": "#/definitions/stringList" },
-        "probes": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "liveness": { "$ref": "#/definitions/probe" },
-            "readiness": { "$ref": "#/definitions/probe" },
-            "startup": { "$ref": "#/definitions/probe" }
-          }
+        "enabled": {
+          "type": "boolean"
         },
-        "securityContext": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "privileged": { "const": false },
-            "allowPrivilegeEscalation": { "const": false },
-            "runAsNonRoot": { "const": true },
-            "runAsUser": { "type": "integer", "minimum": 1 },
-            "runAsGroup": { "type": "integer", "minimum": 0 },
-            "readOnlyRootFilesystem": { "type": "boolean" },
-            "seccompProfile": { "$ref": "#/definitions/seccompProfile" },
-            "capabilities": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "drop": { "$ref": "#/definitions/stringList" },
-                "add": { "type": "array", "maxItems": 0 }
+        "type": {
+          "description": "Exposure goes through the Gateway: a LoadBalancer or NodePort would bypass it.",
+          "enum": [
+            "ClusterIP"
+          ]
+        },
+        "ports": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "port",
+              "targetPort"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z]([-a-z0-9]*[a-z0-9])?$",
+                "maxLength": 15
+              },
+              "port": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "targetPort": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "protocol": {
+                "enum": [
+                  "TCP",
+                  "UDP"
+                ]
               }
             }
           }
         },
-        "podSecurityContext": {
+        "annotations": {
           "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "runAsNonRoot": { "const": true },
-            "runAsUser": { "type": "integer", "minimum": 1 },
-            "runAsGroup": { "type": "integer", "minimum": 0 },
-            "fsGroup": { "type": "integer", "minimum": 0 },
-            "fsGroupChangePolicy": { "enum": ["Always", "OnRootMismatch"] },
-            "supplementalGroups": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
-            "seccompProfile": { "$ref": "#/definitions/seccompProfile" }
-          }
-        },
-        "tmpDirs": {
-          "type": "array",
-          "items": { "type": "string", "pattern": "^/[^\\s]*$" }
-        },
-        "persistence": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "mountPath": { "type": "string", "pattern": "^/[^\\s]*$" },
-            "size": { "type": "string", "pattern": "^[0-9]+(Mi|Gi)$" },
-            "storageClass": { "type": "string" }
+          "additionalProperties": {
+            "type": "string"
           }
         }
       }
+    },
+    "resources": {
+      "$ref": "#/definitions/resources"
+    },
+    "nodeSelector": {
+      "$ref": "#/definitions/freeObject"
+    },
+    "tolerations": {
+      "description": "Accepted and not rendered by the chart.",
+      "type": "array"
+    },
+    "affinity": {
+      "$ref": "#/definitions/freeObject"
+    },
+    "livenessProbe": {
+      "$ref": "#/definitions/toggledProbe"
+    },
+    "readinessProbe": {
+      "$ref": "#/definitions/toggledProbe"
+    },
+    "startupProbe": {
+      "$ref": "#/definitions/toggledProbe"
+    },
+    "configMap": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "data": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "minReplicas": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "maxReplicas": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "targetCPUUtilizationPercentage": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        }
+      }
+    },
+    "env": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/definitions/envName"
+          },
+          "value": {
+            "description": "A string: a number or boolean passes the render and fails at apply time. Secret values belong in Vault (secrets.keys), never here.",
+            "type": "string"
+          },
+          "valueFrom": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "envFrom": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "volumes": {
+      "description": "Accepted and not rendered by the chart.",
+      "type": "array"
+    },
+    "volumeMounts": {
+      "description": "Accepted and not rendered by the chart.",
+      "type": "array"
+    },
+    "lifecycle": {
+      "$ref": "#/definitions/freeObject"
+    },
+    "commonLabels": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "commonAnnotations": {
+      "$ref": "#/definitions/freeObject"
+    },
+    "monitoring": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "path": {
+          "description": "Escaped where it is rendered (Gatus URLs, offhours-guard query).",
+          "type": "string",
+          "pattern": "^/"
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/[^\\s]*$"
+        },
+        "port": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65535
+            },
+            {
+              "type": "string",
+              "pattern": "^[0-9]*$"
+            }
+          ]
+        }
+      }
+    },
+    "tracing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "endpoint": {
+          "type": "string",
+          "pattern": "^https?://[^\\s]+$"
+        },
+        "sampleRatio": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "string",
+              "pattern": "^(0(\\.[0-9]+)?|1(\\.0+)?)$"
+            }
+          ]
+        },
+        "serviceName": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9._-]*$"
+        }
+      }
+    },
+    "logRetention": {
+      "enum": [
+        "",
+        "7d",
+        "14d",
+        "30d"
+      ]
+    },
+    "offhours": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "sleepAt": {
+          "$ref": "#/definitions/cron"
+        },
+        "wakeAt": {
+          "$ref": "#/definitions/cron"
+        },
+        "timezone": {
+          "type": "string",
+          "pattern": "^[A-Za-z_]+(/[A-Za-z0-9_+-]+)*$"
+        }
+      }
+    },
+    "auth": {
+      "description": "Written by app-templates for the app's own code (realm, clientId); the chart does not read it.",
+      "type": "object"
+    },
+    "routes": {
+      "description": "Legacy, written by app-templates before the SecurityPolicy took over; the chart does not read it.",
+      "type": "object"
+    },
+    "global": {
+      "description": "Added by Helm.",
+      "type": "object"
     }
-  }
+  },
+  "additionalProperties": false
 }

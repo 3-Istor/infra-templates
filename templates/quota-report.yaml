@@ -1,0 +1,10 @@
+{{- $usage := include "cnp-generic-app.quotaUsage" . | fromJson }}
+{{- $quota := include "cnp-generic-app.quota" . | fromJson }}
+{{- range $resource := list "cpu" "memory" "pods" }}
+{{- if gt (int (get $usage $resource)) (int (get $quota $resource)) }}
+{{- fail (printf "this release needs up to cpu=%vm memory=%vMi pods=%v at its peak (replicas, rollout surge or canary, migration Job, database, pooler, tunnel), more than the namespace quota cpu=%vm memory=%vMi pods=%v: lower resources.requests or replicaCount" $usage.cpu $usage.memory $usage.pods $quota.cpu $quota.memory $quota.pods) }}
+{{- end }}
+{{- end }}
+{{- if (.Values.cnp | default dict).quotaReport }}
+# cnp-quota usage cpu={{ $usage.cpu }} memory={{ $usage.memory }} pods={{ $usage.pods }} quota cpu={{ $quota.cpu }} memory={{ $quota.memory }} pods={{ $quota.pods }}
+{{- end }}
