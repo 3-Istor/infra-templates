@@ -1,0 +1,48 @@
+{{- if .Values.bucket.enabled }}
+{{- $name := include "cnp-generic-app.bucketName" . }}
+{{- if eq .Values.bucket.mode "rook" }}
+{{- /*
+  Rook writes a ConfigMap (BUCKET_NAME, BUCKET_REGION) and a Secret
+  (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) named after the claim; the app's
+  S3_* variables are read from them (containerEnv). The keys belong to a RGW
+  user that owns this bucket only, so another app's keys cannot read it.
+*/}}
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cnp-generic-app.labels" . | nindent 4 }}
+  annotations:
+    # The pods read the claim's ConfigMap and Secret at start.
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  bucketName: {{ printf "cnp-%s" (include "cnp-generic-app.dbStem" (dict "ctx" . "max" 59)) }}
+  storageClassName: {{ .Values.bucket.storageClass }}
+{{- else if eq .Values.bucket.mode "vault" }}
+{{- /* Fixed path, whatever secrets.vaultPath says: the CMP writes the bucket and its key there. */}}
+{{- $owner := include "cnp-generic-app.owner" (list . "bucket") | fromJson }}
+apiVersion: ricoberger.de/v1alpha1
+kind: VaultSecret
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cnp-generic-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  path: {{ $owner.vaultPath }}/bucket
+  vaultRole: {{ $owner.vaultRole }}
+  type: Opaque
+  keys:
+    - S3_ENDPOINT
+    - S3_BUCKET
+    - S3_REGION
+    - AWS_ACCESS_KEY_ID
+    - AWS_SECRET_ACCESS_KEY
+{{- else }}
+{{- fail (printf "bucket.mode %q is not one of rook, vault" .Values.bucket.mode) }}
+{{- end }}
+{{- end }}

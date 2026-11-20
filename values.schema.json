@@ -109,6 +109,16 @@
         }
       }
     },
+    "bucket": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "mode": { "enum": ["rook", "vault"] },
+        "storageClass": { "enum": ["ceph-bucket-retain", "ceph-bucket"] },
+        "endpointURL": { "type": "string", "pattern": "^https?://[^/?#@\\s]+/?$" }
+      }
+    },
     "links": {
       "type": "array",
       "items": {

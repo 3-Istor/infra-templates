@@ -108,12 +108,21 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Name of the app's ObjectBucketClaim or bucket VaultSecret, and of the
+ConfigMap and Secret Rook derives from the claim.
+*/}}
+{{- define "cnp-generic-app.bucketName" -}}
+{{- printf "%s-bucket" (include "cnp-generic-app.fullname" .) }}
+{{- end }}
+
+{{/*
 Env and envFrom shared by the app container and the migration Job, so both
-see the same database and secrets.
+see the same database, bucket and secrets.
 */}}
 {{- define "cnp-generic-app.containerEnv" -}}
 {{- $tracing := .Values.tracing | default dict }}
-{{- if or .Values.db.enabled .Values.env $tracing.enabled }}
+{{- $rookBucket := and .Values.bucket.enabled (eq .Values.bucket.mode "rook") }}
+{{- if or .Values.db.enabled .Values.env $tracing.enabled $rookBucket }}
 env:
   {{- if .Values.db.enabled }}
   - name: DB_TYPE
@@ -135,6 +144,32 @@ env:
         name: {{ include "cnp-generic-app.fullname" . }}-secrets
         key: password
   {{- end }}
+  {{- if $rookBucket }}
+  {{- $bucket := include "cnp-generic-app.bucketName" . }}
+  {{- /* The RGW is outside the cluster: Rook's BUCKET_HOST is not used, same endpoint as the CNPG backups. */}}
+  - name: S3_ENDPOINT
+    value: {{ .Values.bucket.endpointURL | quote }}
+  - name: S3_BUCKET
+    valueFrom:
+      configMapKeyRef:
+        name: {{ $bucket }}
+        key: BUCKET_NAME
+  - name: S3_REGION
+    valueFrom:
+      configMapKeyRef:
+        name: {{ $bucket }}
+        key: BUCKET_REGION
+  - name: AWS_ACCESS_KEY_ID
+    valueFrom:
+      secretKeyRef:
+        name: {{ $bucket }}
+        key: AWS_ACCESS_KEY_ID
+  - name: AWS_SECRET_ACCESS_KEY
+    valueFrom:
+      secretKeyRef:
+        name: {{ $bucket }}
+        key: AWS_SECRET_ACCESS_KEY
+  {{- end }}
   {{- if $tracing.enabled }}
   {{- include "cnp-generic-app.tracingEnv" . | trim | nindent 2 }}
   {{- end }}
@@ -146,6 +181,10 @@ envFrom:
   {{- if .Values.secrets.enabled }}
   - secretRef:
       name: {{ include "cnp-generic-app.fullname" . }}-secrets
+  {{- end }}
+  {{- if and .Values.bucket.enabled (eq .Values.bucket.mode "vault") }}
+  - secretRef:
+      name: {{ include "cnp-generic-app.bucketName" . }}
   {{- end }}
   {{- with .Values.envFrom }}
     {{- toYaml . | nindent 2 }}
