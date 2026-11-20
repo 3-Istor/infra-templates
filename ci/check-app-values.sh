@@ -45,7 +45,7 @@ for environment in "${environments[@]}"; do
     overlay="$deploy/env/$environment/$component.yaml"
     [[ -f "$overlay" ]] && files+=(-f "$overlay")
     echo "== $environment/$component"
-    if ! report=$(helm template "$project-$app-$component" "$chart_dir" "${files[@]}" \
+    if ! report=$(helm template "$component" "$chart_dir" "${files[@]}" \
         --namespace "$namespace" \
         --set-string "cnp.project=$project,cnp.app=$app,cnp.environment=$environment,cnp.type=$type,project_name=$project" \
         --set cnp.quotaReport=true \
