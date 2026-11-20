@@ -24,12 +24,19 @@ metadata:
     {{- /* Healthy before the backup and migration hooks run (see migrations.yaml). */}}
     argocd.argoproj.io/sync-wave: "-3"
 spec:
-  {{- if .Values.db.metrics }}
+  {{- if or .Values.db.metrics .Values.db.backup.enabled }}
   inheritedMetadata:
+    {{- if .Values.db.backup.enabled }}
+    labels:
+      # The barman plugin in the instance pods ships WAL and base backups to the RGW.
+      cnp.3istor.com/egress-rgw: "true"
+    {{- end }}
+    {{- if .Values.db.metrics }}
     annotations:
       # CNPG exporter port; read by the on-prem annotated-pods scrape and the cloud Alloy.
       prometheus.io/scrape: "true"
       prometheus.io/port: "9187"
+    {{- end }}
   {{- end }}
   instances: {{ .Values.db.instances }}
   {{- with .Values.db.imageName }}

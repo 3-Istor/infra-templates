@@ -69,6 +69,9 @@ spec:
       labels:
         tenant: {{ .Values.project_name | quote }}
         cnp.3istor.com/role: migration
+        {{- if .Values.bucket.enabled }}
+        cnp.3istor.com/egress-rgw: "true"
+        {{- end }}
     spec:
       restartPolicy: Never
       {{- with .Values.imagePullSecrets }}

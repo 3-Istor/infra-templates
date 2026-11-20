@@ -282,6 +282,18 @@ bucket:
   # rook only: Rook's BUCKET_HOST names no reachable endpoint for this RGW.
   endpointURL: http://192.168.1.110:7480
 
+# -----------------------------------------------------------------------------
+# Network
+# -----------------------------------------------------------------------------
+# Apps of the same project allowed to call this one, by app name. Empty keeps
+# today's behaviour: every app of the project reaches it. Set, every other
+# app of the project is refused (CiliumNetworkPolicy ingressDeny), on every
+# port; the app's own namespace, <project>-system (Gatus, offhours-guard, the
+# project Gateway) and the platform namespaces stay allowed. A backing app
+# lists its owner here.
+network:
+  allowFrom: []
+
 # Other apps of the same project this app calls, as ExternalName Services in
 # this namespace (templates/links.yaml). Set by the cnp-apps ApplicationSet
 # from the registry's dependsOn, never by hand.
