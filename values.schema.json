@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "cnp-generic-app values",
-  "description": "Bounds what imported apps add (D16): the workload block, links and the image digest, and what reaches the pod from values a project admin edits in the CMP: probes, podAnnotations, metrics and tracing. Everything else stays free so existing values files keep rendering.",
+  "description": "Bounds what imported apps add (D16): the workload block, links, the image repository and digest, and what reaches the pod from values a project admin edits in the CMP: probes, podAnnotations, metrics and tracing. Everything else stays free so existing values files keep rendering.",
   "type": "object",
   "definitions": {
     "dnsLabel": {
@@ -103,6 +103,11 @@
     "image": {
       "type": "object",
       "properties": {
+        "repository": {
+          "description": "Any registry. Org images (ghcr.io/3-istor/...) are limited to the project's own apps by the Kyverno image policy at admission, which a schema cannot do since it does not see cnp.*. No tag or digest here: they go in image.tag and image.digest.",
+          "type": "string",
+          "pattern": "^([a-z0-9]+([.-][a-z0-9]+)*(:[0-9]+)?/)?[a-z0-9]+([._-]+[a-z0-9]+)*(/[a-z0-9]+([._-]+[a-z0-9]+)*)*$"
+        },
         "digest": {
           "type": "string",
           "pattern": "^(sha256:[a-f0-9]{64})?$"

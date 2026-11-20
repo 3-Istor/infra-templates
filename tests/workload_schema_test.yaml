@@ -91,3 +91,70 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].image
           value: ghcr.io/3-istor/imports/shop/api@sha256:32ca39e021b327dcd74b283f131d72b3a7900b805aa1c77a277b88d7e5adf220
+
+  - it: accepts the image repositories of the deployed apps
+    set:
+      image.repository: ghcr.io/3-istor/optispace/backend
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: accepts a static template app image
+    set:
+      image.repository: ghcr.io/3-istor/my-app-bis
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: accepts an imported app image
+    set:
+      image.repository: ghcr.io/3-istor/imports/epitweet/social-graph-service
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: accepts a Docker official image
+    set:
+      image.repository: docker.io/library/mongo
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: accepts a public image from another registry
+    set:
+      image.repository: quay.io/minio/minio
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: accepts a Docker Hub short name
+    set:
+      image.repository: rabbitmq
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: accepts a registry with a port
+    set:
+      image.repository: registry.example.com:5000/team/api
+    asserts:
+      - isKind:
+          of: Deployment
+
+  - it: refuses a tag smuggled into a short name
+    set:
+      image.repository: "redis:7"
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses a tag or digest smuggled into the repository
+    set:
+      image.repository: ghcr.io/3-istor/imports/other/api:latest
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses a path escaping the org namespace
+    set:
+      image.repository: ghcr.io/3-istor/../evil/api
+    asserts:
+      - failedTemplate: {}
