@@ -33,7 +33,7 @@ spec:
     {{- end }}
     {{- if .Values.db.metrics }}
     annotations:
-      # CNPG exporter port; read by the on-prem annotated-pods scrape and the cloud Alloy.
+      # CNPG exporter port; read by the annotated-pods scrape of each cluster.
       prometheus.io/scrape: "true"
       prometheus.io/port: "9187"
     {{- end }}
