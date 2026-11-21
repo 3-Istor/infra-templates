@@ -480,3 +480,12 @@ tests:
     asserts:
       - notExists:
           path: spec.template.spec.containers[0].readinessProbe
+
+  - it: leaves the replica count of a canary Rollout to offhours-guard
+    template: templates/rollout.yaml
+    set:
+      release.strategy: canary
+      offhours.enabled: true
+    asserts:
+      - notExists:
+          path: spec.replicas

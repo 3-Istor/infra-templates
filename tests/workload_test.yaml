@@ -78,3 +78,30 @@ tests:
           content:
             name: data
             mountPath: /data/db
+
+  - it: leaves the replica count of a Deployment to offhours-guard
+    template: templates/deployment.yaml
+    set:
+      offhours.enabled: true
+      replicaCount: 3
+    asserts:
+      - notExists:
+          path: spec.replicas
+
+  - it: leaves the replica count of a StatefulSet to offhours-guard
+    template: templates/statefulset.yaml
+    set:
+      workload.kind: StatefulSet
+      offhours.enabled: true
+    asserts:
+      - notExists:
+          path: spec.replicas
+
+  - it: keeps the replica count of a StatefulSet without offhours
+    template: templates/statefulset.yaml
+    set:
+      workload.kind: StatefulSet
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1

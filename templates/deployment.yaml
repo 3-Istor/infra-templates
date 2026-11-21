@@ -8,8 +8,10 @@ metadata:
     {{- include "cnp-generic-app.labels" . | nindent 4 }}
     project: {{ .Values.project_name | quote }}
 spec:
-  {{- /* Under canary the Rollout owns the pods and scales this Deployment to 0. */}}
-  {{- if not (or (and .Values.autoscaling .Values.autoscaling.enabled) (include "cnp-generic-app.isCanary" .)) }}
+  {{- /* Under canary the Rollout owns the pods and scales this Deployment to 0.
+  Under offhours, offhours-guard owns the count: an Argo CD sync must not put
+  back a count it read while the app slept. */}}
+  {{- if not (or (and .Values.autoscaling .Values.autoscaling.enabled) (include "cnp-generic-app.isCanary" .) .Values.offhours.enabled) }}
   replicas: {{ .Values.replicaCount | default 1 }}
   {{- end }}
   selector:
