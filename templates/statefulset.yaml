@@ -15,7 +15,9 @@ metadata:
     {{- include "cnp-generic-app.labels" . | nindent 4 }}
     project: {{ .Values.project_name | quote }}
 spec:
+  {{- if not .Values.offhours.enabled }}
   replicas: 1
+  {{- end }}
   serviceName: {{ include "cnp-generic-app.fullname" . }}
   {{- /*
     Retain (D17) keeps the PVC when only the StatefulSet goes, e.g. a bad

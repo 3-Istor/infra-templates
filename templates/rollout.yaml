@@ -53,7 +53,7 @@ metadata:
     cnp.3istor.com/release-preset: {{ $preset | quote }}
     cnp.3istor.com/release-allow-force: {{ $release.allowForce | default false | quote }}
 spec:
-  {{- if not (and .Values.autoscaling .Values.autoscaling.enabled) }}
+  {{- if not (or (and .Values.autoscaling .Values.autoscaling.enabled) .Values.offhours.enabled) }}
   replicas: {{ .Values.replicaCount | default 1 }}
   {{- end }}
   selector:
