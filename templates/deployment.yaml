@@ -25,9 +25,6 @@ spec:
         {{- with (include "cnp-generic-app.networkLabels" . | trim) }}
         {{- . | nindent 8 }}
         {{- end }}
-        {{- with .Values.logRetention }}
-        cnp.3istor.com/log-retention: {{ . | quote }}
-        {{- end }}
       {{- with (include "cnp-generic-app.podAnnotations" . | trim) }}
       annotations:
         {{- . | nindent 8 }}

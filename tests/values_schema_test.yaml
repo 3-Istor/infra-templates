@@ -67,13 +67,6 @@ tests:
       - failedTemplate:
           errorPattern: "at '/offhours/sleepAt'"
 
-  - it: refuses a log retention Loki does not offer
-    set:
-      logRetention: 90d
-    asserts:
-      - failedTemplate:
-          errorPattern: "at '/logRetention'"
-
   - it: refuses an env value that is not a string
     set:
       env:
