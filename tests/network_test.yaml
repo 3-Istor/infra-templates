@@ -106,6 +106,15 @@ tests:
       - notExists:
           path: spec.template.metadata.labels["cnp.3istor.com/egress-rgw"]
 
+  - it: lets an app without a bucket reach the RGW when it asks for it
+    template: templates/deployment.yaml
+    set:
+      network.rgwEgress: true
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["cnp.3istor.com/egress-rgw"]
+          value: "true"
+
   - it: lets the migration Job of an app with a bucket reach the RGW
     template: templates/migrations.yaml
     set:

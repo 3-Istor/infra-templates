@@ -300,6 +300,9 @@ bucket:
 # lists its owner here.
 network:
   allowFrom: []
+  # Label the pods for the project's RGW egress without claiming a bucket, for
+  # an app that only proxies another app's bucket.
+  rgwEgress: false
 
 # Other apps of the same project this app calls, as ExternalName Services in
 # this namespace (templates/links.yaml). Set by the cnp-apps ApplicationSet
