@@ -83,6 +83,9 @@ secrets:
 # One app-registry VaultSecret per namespace: set false on all but one release sharing it (fullstack frontend).
 registrySecret:
   create: true
+  # A second app in the namespace (a frontend) sets its own name, so it never
+  # waits for the secret of another Argo CD Application.
+  name: app-registry
   # app reads secrets.vaultPath/registry with the app's role. project reads the
   # project's credential (templates/registry-secret.yaml), for imported apps.
   scope: app
