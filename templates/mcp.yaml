@@ -94,7 +94,8 @@ spec:
       port: 80
       targetPort: {{ $port }}
       protocol: TCP
-      appProtocol: http
+      {{- /* How the gateway discovers the project's MCP servers, with the label above. */}}
+      appProtocol: agentgateway.dev/mcp
   selector:
     {{- toYaml $selector | nindent 4 }}
 ---

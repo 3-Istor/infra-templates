@@ -176,7 +176,18 @@ tests:
     template: templates/agent.yaml
     asserts:
       - hasDocuments:
-          count: 6
+          count: 7
+
+  - it: lets the gateway's A2A route reach the agent's Service
+    template: templates/agent.yaml
+    documentSelector: {path: kind, value: ReferenceGrant}
+    asserts:
+      - equal:
+          path: spec.from
+          value: [{group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: ai-gateway}]
+      - equal:
+          path: spec.to
+          value: [{group: "", kind: Service, name: bot}]
 
   - it: renders no RemoteMCPServer for an agent without MCP tools
     template: templates/agent.yaml
@@ -184,7 +195,7 @@ tests:
       agent.tools: [web_search]
     asserts:
       - hasDocuments:
-          count: 5
+          count: 6
 
   - it: runs a scheduled agent through the gateway with its own client
     template: templates/agent.yaml

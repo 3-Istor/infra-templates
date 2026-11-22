@@ -153,6 +153,24 @@ spec:
           type: RuntimeDefault
       extraContainers:
         {{- include "cnp-generic-app.agentSidecar" . | trim | nindent 8 }}
+---
+{{- /* The gateway's A2A route (/a2a/<project>/<agent>, in ns ai-gateway) targets the Service kagent creates. */}}
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: {{ $name }}-a2a
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: {{ $ai.gatewayNamespace }}
+  to:
+    - group: ""
+      kind: Service
+      name: {{ $name }}
 {{- if eq $agent.trigger.type "schedule" }}
 ---
 {{- /*
