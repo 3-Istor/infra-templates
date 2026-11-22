@@ -9,6 +9,15 @@ set:
   ingress.hostname: web.example.com
   ingress.sso_protected: true
 tests:
+  - it: names the token cookies itself, so a project move overwrites them instead of adding new ones
+    asserts:
+      - equal:
+          path: spec.oidc.cookieNames.accessToken
+          value: AccessToken
+      - equal:
+          path: spec.oidc.cookieNames.idToken
+          value: IdToken
+
   - it: forwards the access token without allowed groups
     asserts:
       - equal:

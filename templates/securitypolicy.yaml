@@ -34,6 +34,10 @@ spec:
     
     redirectURL: "https://{{ .Values.ingress.hostname }}/oauth2/callback"
     logoutPath: "/logout"
+    {{- /* Fixed names: the default suffix is random per SecurityPolicy, so every project move added a set of tokens until nginx refused the Cookie header (400). */}}
+    cookieNames:
+      accessToken: AccessToken
+      idToken: IdToken
     {{- /* Cookies are encrypted: the Bearer header is how jwt_authn and the app get the token. */}}
     forwardAccessToken: true
     {{- if .Values.ingress.allowedGroups }}
