@@ -1,0 +1,244 @@
+suite: agent
+templates:
+  - templates/agent.yaml
+  - templates/deployment.yaml
+  - templates/service.yaml
+release:
+  name: shop-bot-app
+  namespace: shop-bot
+set:
+  cnp.project: shop
+  cnp.app: bot
+  cnp.environment: prod
+  cnp.type: agent
+  fullnameOverride: bot
+  image.repository: ghcr.io/3-istor/bot
+  agent:
+    template: app-bot
+    description: Lit les mentions
+    model: claude-haiku-5-5
+    effort: low
+    maxSteps: 6
+    trigger: {type: event}
+    instructions: Tu réponds aux mentions.
+    tools: [shop-mcp__get_thread, web_search, run_python]
+    calls: [bot-actor]
+tests:
+  - it: renders no Deployment or Service of its own
+    template: templates/deployment.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders no app Service either
+    template: templates/service.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing for an app that is not an agent
+    template: templates/agent.yaml
+    set:
+      cnp.type: service
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: points the model at the sidecar, never at a provider
+    template: templates/agent.yaml
+    documentSelector: {path: kind, value: ModelConfig}
+    asserts:
+      - equal:
+          path: spec.anthropic.baseUrl
+          value: http://127.0.0.1:15001
+      - notExists:
+          path: spec.apiKeySecret
+      - equal:
+          path: spec.model
+          value: claude-haiku-5-5
+
+  - it: reaches the project's MCP tools through the sidecar and the gateway
+    template: templates/agent.yaml
+    documentSelector: {path: kind, value: RemoteMCPServer}
+    asserts:
+      - equal:
+          path: spec.url
+          value: http://127.0.0.1:15001/mcp/shop
+
+  - it: lists the MCP tools but not web_search, a model-side tool the gateway grants
+    template: templates/agent.yaml
+    documentSelector: {path: kind, value: Agent}
+    asserts:
+      - equal:
+          path: spec.declarative.tools[0].mcpServer.toolNames
+          value: [shop-mcp__get_thread, run_python]
+
+  - it: calls other agents of the project by their namespace
+    template: templates/agent.yaml
+    documentSelector: {path: kind, value: Agent}
+    asserts:
+      - equal:
+          path: spec.declarative.tools[1].agent
+          value: {name: bot-actor, namespace: shop-bot-actor}
+
+  - it: lets only agents of the project reference it
+    template: templates/agent.yaml
+    documentSelector: {path: kind, value: Agent}
+    asserts:
+      - equal:
+          path: spec.allowedNamespaces.selector.matchLabels
+          value: {cnp.3istor.com/project: shop}
+
+  - it: runs the gw-auth-proxy sidecar with the agent's own client from Vault
+    template: templates/agent.yaml
+    documentSelector: {path: kind, value: Agent}
+    asserts:
+      - equal:
+          path: spec.declarative.deployment.extraContainers[0].name
+          value: gw-auth-proxy
+      - equal:
+          path: spec.declarative.deployment.extraContainers[0].env[1].valueFrom.secretKeyRef
+          value: {name: bot-ai-oidc, key: client_secret}
+
+  - it: gives the Go ADK a placeholder key, never a real one
+    template: templates/agent.yaml
+    documentSelector: {path: kind, value: Agent}
+    asserts:
+      - contains:
+          path: spec.declarative.deployment.env
+          content: {name: ANTHROPIC_API_KEY, value: placeholder-gateway-holds-the-key}
+
+  - it: syncs the agent's client from its own Vault path
+    template: templates/agent.yaml
+    documentSelector: {path: kind, value: VaultSecret}
+    asserts:
+      - equal:
+          path: spec.path
+          value: project-shop/bot/ai-oidc
+      - equal:
+          path: spec.vaultRole
+          value: shop-bot-role
+
+  - it: states the step budget and the output contract in the system prompt
+    template: templates/agent.yaml
+    documentSelector: {path: kind, value: Agent}
+    set:
+      agent.output:
+        name: bot_answer
+        schema: {type: object, required: [answer], properties: {answer: {type: string}}}
+    asserts:
+      - matchRegex:
+          path: spec.declarative.systemMessage
+          pattern: "(?s)^Tu réponds aux mentions\\..*au plus 6 étapes.*objet JSON valide.*\"required\""
+      - equal:
+          path: spec.declarative.a2aConfig.skills[0].id
+          value: bot_answer
+
+  - it: labels the pods with a stronger isolation when the values ask for one
+    template: templates/agent.yaml
+    documentSelector: {path: kind, value: Agent}
+    set:
+      agent.isolation: kata
+    asserts:
+      - equal:
+          path: spec.declarative.deployment.labels
+          value: {cnp.3istor.com/isolation: kata}
+
+  - it: leaves the isolation to the namespace by default
+    template: templates/agent.yaml
+    documentSelector: {path: kind, value: Agent}
+    asserts:
+      - notExists:
+          path: spec.declarative.deployment.labels
+
+  - it: denies the Internet and the rest of the project to the agent
+    template: templates/agent.yaml
+    documentSelector: {path: kind, value: CiliumNetworkPolicy}
+    asserts:
+      - contains:
+          path: spec.egressDeny
+          content: {toEntities: [world]}
+      - equal:
+          path: spec.egressDeny[1].toEndpoints[0].matchExpressions[1]
+          value: {key: "k8s:io.kubernetes.pod.namespace", operator: NotIn, values: [shop-bot]}
+
+  - it: is only reached from the gateway and kagent
+    template: templates/agent.yaml
+    documentSelector: {path: kind, value: CiliumNetworkPolicy}
+    asserts:
+      - equal:
+          path: spec.ingress[0].fromEndpoints
+          value:
+            - matchLabels: {k8s:io.kubernetes.pod.namespace: ai-gateway}
+            - matchLabels: {k8s:io.kubernetes.pod.namespace: kagent}
+
+  - it: renders no schedule for an event agent
+    template: templates/agent.yaml
+    asserts:
+      - hasDocuments:
+          count: 6
+
+  - it: renders no RemoteMCPServer for an agent without MCP tools
+    template: templates/agent.yaml
+    set:
+      agent.tools: [web_search]
+    asserts:
+      - hasDocuments:
+          count: 5
+
+  - it: runs a scheduled agent through the gateway with its own client
+    template: templates/agent.yaml
+    documentSelector: {path: kind, value: CronJob}
+    set:
+      agent.trigger: {type: schedule, cron: "0 8 * * 1-5", message: Fais le point}
+    asserts:
+      - equal:
+          path: spec.schedule
+          value: "0 8 * * 1-5"
+      - equal:
+          path: spec.timeZone
+          value: Europe/Paris
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.initContainers[0].restartPolicy
+          value: Always
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content: {name: AGENT_URL, value: "http://127.0.0.1:15001/a2a/shop/bot/"}
+
+  - it: refuses a schedule without cron
+    template: templates/agent.yaml
+    set:
+      agent.trigger: {type: schedule}
+    asserts:
+      - failedTemplate:
+          errorPattern: "agent.trigger.type schedule needs agent.trigger.cron"
+
+  - it: refuses empty instructions
+    template: templates/agent.yaml
+    set:
+      agent.instructions: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: "agent.instructions is the agent's system prompt"
+
+  - it: refuses an agent that calls itself
+    template: templates/agent.yaml
+    set:
+      agent.calls: [bot]
+    asserts:
+      - failedTemplate:
+          errorPattern: "agent.calls cannot name the agent itself"
+
+  - it: refuses a model outside the allowed list
+    template: templates/agent.yaml
+    set:
+      agent.model: gpt-5
+    asserts:
+      - failedTemplate: {}
+
+  - it: refuses an unknown key in the agent block
+    template: templates/agent.yaml
+    set:
+      agent.apiKey: sk-ant-xyz
+    asserts:
+      - failedTemplate: {}

@@ -1,0 +1,13 @@
+{{- /*
+  ai.enabled gives the app model access through the AI gateway: the client of
+  its Keycloak client (app-<project>-<app>, created by the CMP with the
+  record's spec.ai.apps entry) is synced from Vault, and the app container
+  gets CNP_AI_* (templates/_helpers.tpl containerEnv). An agent holds its own
+  client (templates/agent.yaml).
+*/}}
+{{- if .Values.ai.enabled }}
+{{- with include "cnp-generic-app.aiRuntime" . }}
+{{- fail (printf "ai.enabled is for apps this chart runs; an app of type %s gets its gateway access from the platform" .) }}
+{{- end }}
+{{ include "cnp-generic-app.aiVaultSecret" . }}
+{{- end }}

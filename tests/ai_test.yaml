@@ -1,0 +1,73 @@
+suite: ai
+templates:
+  - templates/ai.yaml
+  - templates/deployment.yaml
+release:
+  name: shop-api-app
+  namespace: shop-api
+set:
+  cnp.project: shop
+  cnp.app: api
+  cnp.environment: prod
+  cnp.type: service
+  fullnameOverride: api
+  image.repository: ghcr.io/3-istor/imports/shop/api/ci
+tests:
+  - it: renders nothing without ai.enabled
+    template: templates/ai.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: syncs the app's gateway client from its own Vault path
+    template: templates/ai.yaml
+    set:
+      ai.enabled: true
+    asserts:
+      - isKind:
+          of: VaultSecret
+      - equal:
+          path: metadata.name
+          value: api-ai-oidc
+      - equal:
+          path: spec.path
+          value: project-shop/api/ai-oidc
+
+  - it: gives the app the gateway, the token endpoint and its client
+    template: templates/deployment.yaml
+    set:
+      ai.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: CNP_AI_GATEWAY_URL, value: "http://ai-gateway.ai-gateway.svc.cluster.local:8080"}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content: {name: CNP_AI_TOKEN_URL, value: "https://auth.3istor.com/realms/3istor/protocol/openid-connect/token"}
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CNP_AI_CLIENT_SECRET
+            valueFrom: {secretKeyRef: {name: api-ai-oidc, key: client_secret}}
+
+  - it: keeps the app's env untouched without ai.enabled
+    template: templates/deployment.yaml
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env
+
+  - it: refuses ai.enabled on an agent, which holds its own client
+    template: templates/ai.yaml
+    set:
+      cnp.type: agent
+      ai.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "ai.enabled is for apps this chart runs"
+
+  - it: refuses an unknown key in the ai block
+    template: templates/ai.yaml
+    set:
+      ai.gatewayURL: http://evil.example
+    asserts:
+      - failedTemplate: {}

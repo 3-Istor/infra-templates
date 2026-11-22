@@ -1,0 +1,120 @@
+{{- /*
+  An MCP server of the project, registered on the AI gateway's /mcp/<project>
+  with its tools prefixed by the app name. Either an app of type mcp, which
+  kmcp runs from this chart's image values, or any app serving MCP on /mcp
+  with mcp.enabled. The gateway always reaches it the same way, whatever runs
+  it: Service <app>-mcp, port 80, path /mcp. Only the gateway gets in.
+*/}}
+{{- $runtime := include "cnp-generic-app.aiRuntime" . }}
+{{- if or (eq $runtime "mcp") .Values.mcp.enabled }}
+{{- if eq $runtime "agent" }}
+{{- fail "mcp.enabled: an agent is not an MCP server" }}
+{{- end }}
+{{- $owner := include "cnp-generic-app.owner" (list . "mcp") | fromJson }}
+{{- $ai := include "cnp-generic-app.aiPlatform" . | fromJson }}
+{{- $name := include "cnp-generic-app.fullname" . }}
+{{- $port := include "cnp-generic-app.mcpPort" . | int }}
+{{- $selector := include "cnp-generic-app.selectorLabels" . | fromYaml }}
+{{- if eq $runtime "mcp" }}
+{{- /* kmcp names the Deployment and its pods' labels after the MCPServer. */}}
+{{- $selector = dict "app.kubernetes.io/name" $name "app.kubernetes.io/instance" $name }}
+{{- $command := dig "command" (list) (.Values.workload | default dict) }}
+{{- $args := concat (rest $command) (dig "args" (list) (.Values.workload | default dict)) }}
+apiVersion: kagent.dev/v1alpha1
+kind: MCPServer
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cnp-generic-app.labels" . | nindent 4 }}
+spec:
+  transportType: http
+  httpTransport:
+    targetPort: {{ $port }}
+    path: /mcp
+  deployment:
+    image: {{ include "cnp-generic-app.image" . }}
+    imagePullPolicy: {{ .Values.image.pullPolicy }}
+    {{- with .Values.imagePullSecrets }}
+    imagePullSecrets:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with $command }}
+    cmd: {{ first . | quote }}
+    {{- end }}
+    {{- with $args }}
+    args:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    port: {{ $port }}
+    {{- $env := dict }}
+    {{- range .Values.env }}
+    {{- if .valueFrom }}
+    {{- fail (printf "env %s: an MCP server run by kmcp takes literal values only; put secrets in Vault (secrets.enabled)" .name) }}
+    {{- end }}
+    {{- $_ := set $env .name (.value | default "") }}
+    {{- end }}
+    {{- with $env }}
+    env:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- if .Values.secrets.enabled }}
+    secretRefs:
+      - name: {{ $name }}-secrets
+    {{- end }}
+    resources:
+      {{- toYaml .Values.resources | nindent 6 }}
+    {{- with .Values.podSecurityContext }}
+    podSecurityContext:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.securityContext }}
+    securityContext:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+---
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-mcp
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cnp-generic-app.labels" . | nindent 4 }}
+    cnp.3istor.com/mcp: "true"
+  annotations:
+    cnp.3istor.com/mcp-path: /mcp
+    {{- with .Values.mcp.tools }}
+    cnp.3istor.com/mcp-tools: {{ join "," . | quote }}
+    {{- end }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: mcp
+      port: 80
+      targetPort: {{ $port }}
+      protocol: TCP
+      appProtocol: http
+  selector:
+    {{- toYaml $selector | nindent 4 }}
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ $name }}-mcp
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cnp-generic-app.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- toYaml $selector | nindent 6 }}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: {{ $ai.gatewayNamespace }}
+      toPorts:
+        - ports:
+            - port: {{ $port | quote }}
+              protocol: TCP
+{{- end }}
