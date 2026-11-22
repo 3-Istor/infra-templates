@@ -120,7 +120,7 @@ egress-rgw lets the pod reach the RGW through the default egress filter.
 {{- if eq (dig "type" "" (.Values.cnp | default dict)) "backing" }}
 cnp.3istor.com/role: backing
 {{- end }}
-{{- if .Values.bucket.enabled }}
+{{- if or .Values.bucket.enabled .Values.network.rgwEgress }}
 cnp.3istor.com/egress-rgw: "true"
 {{- end }}
 {{- end }}
