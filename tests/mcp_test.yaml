@@ -76,6 +76,12 @@ tests:
           path: spec.ports[0].port
           value: 80
       - equal:
+          path: spec.ports[0].appProtocol
+          value: agentgateway.dev/mcp
+      - equal:
+          path: metadata.labels["cnp.3istor.com/mcp"]
+          value: "true"
+      - equal:
           path: spec.selector
           value: {app.kubernetes.io/name: tools, app.kubernetes.io/instance: tools}
 
