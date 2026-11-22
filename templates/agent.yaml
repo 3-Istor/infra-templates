@@ -1,0 +1,309 @@
+{{- /*
+  An app of type agent (cnp.type, set by the ApplicationSet) is a kagent
+  agent declared by its agent: values. Its rights (models, daily budget,
+  tools, minimum isolation, callers) live in the registry record's spec.ai and
+  are enforced at the AI gateway, which every call of the agent goes through:
+  the gw-auth-proxy sidecar on 127.0.0.1:15001 swaps the placeholder key for a
+  short-lived token of the agent's own Keycloak client, so no provider key and
+  no long-lived token ever sits in the pod. Values can ask for less than the
+  rights, never more: the gateway refuses the rest.
+*/}}
+{{- if eq (include "cnp-generic-app.aiRuntime" .) "agent" }}
+{{- $owner := include "cnp-generic-app.owner" (list . "agent") | fromJson }}
+{{- $ai := include "cnp-generic-app.aiPlatform" . | fromJson }}
+{{- $agent := .Values.agent }}
+{{- $name := include "cnp-generic-app.fullname" . }}
+{{- if not $agent.instructions }}
+{{- fail "agent.instructions is the agent's system prompt: it cannot be empty" }}
+{{- end }}
+{{- if and (eq $agent.trigger.type "schedule") (not $agent.trigger.cron) }}
+{{- fail "agent.trigger.type schedule needs agent.trigger.cron, e.g. \"0 8 * * 1-5\"" }}
+{{- end }}
+{{- if and $agent.trigger.cron (ne $agent.trigger.type "schedule") }}
+{{- fail (printf "agent.trigger.cron only applies to trigger type schedule, not %q" $agent.trigger.type) }}
+{{- end }}
+{{- if has $name $agent.calls }}
+{{- fail "agent.calls cannot name the agent itself" }}
+{{- end }}
+{{- $mcpTools := without $agent.tools "web_search" }}
+{{- $labels := include "cnp-generic-app.labels" . }}
+{{- $systemMessage := trim $agent.instructions }}
+{{- $systemMessage = printf "%s\n\n## Limites\nTu disposes d'au plus %d étapes (appels de modèle et d'outils) pour cette tâche. Si tu ne peux pas conclure, réponds avec ce que tu as établi et dis ce qui manque." $systemMessage (int $agent.maxSteps) }}
+{{- with $agent.output }}
+{{- $systemMessage = printf "%s\n\n## Format de sortie\nRéponds uniquement par un objet JSON valide, sans texte autour ni bloc de code, conforme à ce schéma JSON (%s) :\n%s" $systemMessage .name (toPrettyJson .schema) }}
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+{{- /* The agent talks to the gateway and kagent over HTTP, never to the Kubernetes API. */}}
+automountServiceAccountToken: false
+---
+{{ include "cnp-generic-app.aiVaultSecret" . }}
+---
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  provider: Anthropic
+  model: {{ $agent.model }}
+  {{- /* The gateway applies the effort the record allows for the model; this header says what the agent asks for. */}}
+  defaultHeaders:
+    x-cnp-effort: {{ $agent.effort }}
+  anthropic:
+    baseUrl: {{ $ai.sidecarURL }}
+{{- if $mcpTools }}
+---
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: {{ $name }}-tools
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  description: {{ printf "Outils MCP du projet %s, par la passerelle IA (droits par outil)" $owner.project | quote }}
+  protocol: STREAMABLE_HTTP
+  url: {{ printf "%s/mcp/%s" $ai.sidecarURL $owner.project }}
+{{- end }}
+---
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+    {{- with $agent.template }}
+    cnp.3istor.com/agent-template: {{ . }}
+    {{- end }}
+  annotations:
+    cnp.3istor.com/agent-trigger: {{ $agent.trigger.type }}
+    cnp.3istor.com/agent-effort: {{ $agent.effort }}
+    cnp.3istor.com/agent-max-steps: {{ $agent.maxSteps | quote }}
+    {{- with $agent.output }}
+    cnp.3istor.com/agent-output: {{ .name }}
+    {{- end }}
+spec:
+  type: Declarative
+  description: {{ $agent.description | default (printf "Agent %s du projet %s" $name $owner.project) | quote }}
+  {{- /* Agents of the project may list it in their calls; kagent then routes them through the sidecar and the gateway. */}}
+  allowedNamespaces:
+    from: Selector
+    selector:
+      matchLabels:
+        cnp.3istor.com/project: {{ $owner.project | quote }}
+  declarative:
+    runtime: go
+    modelConfig: {{ $name }}
+    systemMessage: {{ $systemMessage | quote }}
+    a2aConfig:
+      skills:
+        - id: {{ dig "name" $name ($agent.output | default dict) }}
+          name: {{ $name }}
+          description: {{ $agent.description | default (printf "Agent %s du projet %s" $name $owner.project) | quote }}
+          inputModes: [text]
+          outputModes: [text]
+    {{- if or $mcpTools $agent.calls }}
+    tools:
+      {{- if $mcpTools }}
+      - type: McpServer
+        mcpServer:
+          apiGroup: kagent.dev
+          kind: RemoteMCPServer
+          name: {{ $name }}-tools
+          toolNames:
+            {{- range $mcpTools }}
+            - {{ . }}
+            {{- end }}
+      {{- end }}
+      {{- range $agent.calls }}
+      - type: Agent
+        agent:
+          name: {{ . }}
+          namespace: {{ printf "%s-%s" $owner.project . }}
+      {{- end }}
+    {{- end }}
+    deployment:
+      serviceAccountName: {{ $name }}-agent
+      {{- /* Raises the namespace's minimum (record spec.ai): Kyverno picks the stronger of the two. */}}
+      {{- with $agent.isolation }}
+      labels:
+        cnp.3istor.com/isolation: {{ . }}
+      {{- end }}
+      env:
+        {{- /* kagent's Go ADK refuses to start without it. The sidecar drops it; Kyverno refuses real key values. */}}
+        - name: ANTHROPIC_API_KEY
+          value: placeholder-gateway-holds-the-key
+      resources:
+        {{- toYaml $agent.resources | nindent 8 }}
+      securityContext:
+        runAsNonRoot: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: [ALL]
+        seccompProfile:
+          type: RuntimeDefault
+      extraContainers:
+        {{- include "cnp-generic-app.agentSidecar" . | trim | nindent 8 }}
+{{- if eq $agent.trigger.type "schedule" }}
+---
+{{- /*
+  A scheduled run calls the agent like any caller: A2A on the gateway, with
+  the agent's own client, so the kill switch, the budget and the traces apply.
+  The sidecar runs as a native sidecar (restartPolicy Always) and stops with
+  the Job.
+*/}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $name }}-schedule
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  schedule: {{ $agent.trigger.cron | quote }}
+  timeZone: {{ $agent.trigger.timeZone | default "Europe/Paris" }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 900
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            {{- include "cnp-generic-app.selectorLabels" . | nindent 12 }}
+            cnp.3istor.com/agent-trigger: schedule
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ $name }}-agent
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          initContainers:
+            {{- $sidecar := include "cnp-generic-app.agentSidecar" . | fromYamlArray | first }}
+            {{- $_ := set $sidecar "restartPolicy" "Always" }}
+            {{- list $sidecar | toYaml | nindent 12 }}
+          containers:
+            - name: trigger
+              image: {{ $ai.curlImage }}
+              env:
+                - name: BODY
+                  value: {{ dict "jsonrpc" "2.0" "id" "schedule" "method" "message/send" "params" (dict "message" (dict "role" "user" "messageId" "schedule-RUN_ID" "parts" (list (dict "kind" "text" "text" ($agent.trigger.message | default "Exécute ta tâche planifiée."))))) | toJson | quote }}
+                - name: AGENT_URL
+                  value: {{ printf "%s/a2a/%s/%s/" $ai.sidecarURL $owner.project $name | quote }}
+              command:
+                - /bin/sh
+                - -ec
+                - >-
+                  curl -fsS --retry 5 --retry-connrefused --retry-delay 2 --max-time 840
+                  -H 'content-type: application/json'
+                  -d "$(printf '%s' "$BODY" | sed "s/RUN_ID/$(date +%s)/")" "$AGENT_URL"
+              resources:
+                requests:
+                  cpu: 5m
+                  memory: 16Mi
+                limits:
+                  memory: 32Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+{{- end }}
+---
+{{- /*
+  The project's ingress policy lets every namespace of the project in; an
+  agent is only reached through the gateway and kagent, and only reaches them,
+  Keycloak (its sidecar's token), DNS and the trace collector. The egress
+  denies win over the project's default egress (DNS, project, Internet).
+*/}}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ $name }}-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- $labels | nindent 4 }}
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: {{ $ai.gatewayNamespace }}
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: {{ $ai.kagentNamespace }}
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  ingressDeny:
+    - fromEndpoints:
+        - matchExpressions:
+            - key: k8s:io.cilium.k8s.namespace.labels.cnp.3istor.com/project
+              operator: In
+              values: [{{ $owner.project | quote }}]
+            - key: k8s:io.kubernetes.pod.namespace
+              operator: NotIn
+              values: [{{ $owner.namespace | quote }}]
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: {{ $ai.gatewayNamespace }}
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: {{ $ai.keycloakNamespace }}
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: {{ $ai.kagentNamespace }}
+      toPorts:
+        - ports:
+            - port: "8083"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: observability
+      toPorts:
+        - ports:
+            - port: "4317"
+              protocol: TCP
+            - port: "4318"
+              protocol: TCP
+  egressDeny:
+    - toEntities:
+        - world
+    - toEndpoints:
+        - matchExpressions:
+            - key: k8s:io.cilium.k8s.namespace.labels.cnp.3istor.com/project
+              operator: In
+              values: [{{ $owner.project | quote }}]
+            - key: k8s:io.kubernetes.pod.namespace
+              operator: NotIn
+              values: [{{ $owner.namespace | quote }}]
+{{- end }}

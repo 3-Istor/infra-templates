@@ -225,7 +225,9 @@
             "static",
             "fullstack",
             "service",
-            "backing"
+            "backing",
+            "agent",
+            "mcp"
           ]
         },
         "quotaReport": {
@@ -1133,6 +1135,162 @@
     "global": {
       "description": "Added by Helm.",
       "type": "object"
+    },
+    "ai": {
+      "description": "Model access through the AI gateway, within the record's spec.ai.apps entry.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "mcp": {
+      "description": "An MCP server registered on the AI gateway (/mcp/<project>, tools <app>__<tool>).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "port": {
+          "description": "Container port serving /mcp; 0 picks the first service.ports targetPort, or 3000 for type mcp.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "tools": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        }
+      }
+    },
+    "agent": {
+      "description": "A kagent agent, rendered when cnp.type is agent. Rights are the record's spec.ai.agents entry.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "effort",
+        "maxSteps",
+        "trigger",
+        "instructions",
+        "tools",
+        "calls"
+      ],
+      "properties": {
+        "template": {
+          "description": "Catalogue id (app-templates agents/<id>.yaml).",
+          "type": "string",
+          "pattern": "^([a-z][a-z0-9-]*)?$"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "model": {
+          "enum": [
+            "claude-haiku-5-5",
+            "claude-sonnet-5-5"
+          ]
+        },
+        "effort": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "maxSteps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "trigger": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "chat",
+                "event",
+                "a2a",
+                "schedule"
+              ]
+            },
+            "cron": {
+              "$ref": "#/definitions/cron"
+            },
+            "timeZone": {
+              "type": "string",
+              "pattern": "^[A-Za-z_]+(/[A-Za-z0-9_+-]+)*$"
+            },
+            "message": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          }
+        },
+        "instructions": {
+          "type": "string",
+          "maxLength": 20000
+        },
+        "tools": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]*(__[A-Za-z0-9_-]+)?$"
+          }
+        },
+        "output": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "schema": {
+              "type": "object"
+            }
+          },
+          "dependentRequired": {
+            "name": [
+              "schema"
+            ],
+            "schema": [
+              "name"
+            ]
+          }
+        },
+        "calls": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/definitions/dnsLabel"
+          }
+        },
+        "isolation": {
+          "enum": [
+            "",
+            "runc",
+            "gvisor",
+            "kata"
+          ]
+        },
+        "resources": {
+          "$ref": "#/definitions/resources"
+        }
+      }
     }
   },
   "additionalProperties": false

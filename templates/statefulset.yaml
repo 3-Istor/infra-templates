@@ -1,4 +1,4 @@
-{{- if include "cnp-generic-app.isStatefulSet" . }}
+{{- if and (include "cnp-generic-app.isStatefulSet" .) (not (include "cnp-generic-app.aiRuntime" .)) }}
 {{- $persistence := dig "persistence" dict .Values.workload }}
 {{- if include "cnp-generic-app.isCanary" . }}
 {{- fail "workload.kind StatefulSet runs one replica on its own volume: it cannot take release.strategy canary" }}

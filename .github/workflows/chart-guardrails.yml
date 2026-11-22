@@ -23,6 +23,8 @@ jobs:
           for values in tests/backing/*.yaml; do
             helm lint . -f "$values" --namespace p-x --set project_name=p,app_name=x,fullnameOverride=x,cnp.project=p,cnp.app=x,cnp.environment=prod
           done
+          helm lint . -f tests/agents/agent.yaml --namespace shop-bot-reader
+          helm lint . -f tests/agents/mcp.yaml --namespace shop-tools
 
       - name: helm unittest
         run: |
@@ -56,6 +58,11 @@ jobs:
             helm template backing . -f "$values" --namespace p-x --set project_name=p,app_name=x,fullnameOverride=x,cnp.project=p,cnp.app=x,cnp.environment=prod \
               | kubeconform -strict -summary -ignore-missing-schemas
           done
+          helm template agent . -f tests/agents/agent.yaml --namespace shop-bot-reader \
+            --set 'agent.trigger.type=schedule,agent.trigger.cron=0 8 * * 1-5' \
+            | kubeconform -strict -summary -ignore-missing-schemas
+          helm template mcp . -f tests/agents/mcp.yaml --namespace shop-tools \
+            | kubeconform -strict -summary -ignore-missing-schemas
 
   rendered-diff:
     name: Rendered manifest diff

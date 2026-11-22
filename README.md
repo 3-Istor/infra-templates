@@ -53,6 +53,30 @@ Leurs valeurs viennent de cnp-projects (`apps/<projet>/<app>/values.yaml`, écri
 
 `tests/backing/` montre les valeurs attendues de MongoDB, Redis, Neo4j et Elasticsearch ; `tests/imported-service.yaml` celles d’un service importé.
 
+## IA : agents, serveurs MCP, accès aux modèles
+
+Les droits (modèles, budgets, outils, isolation minimale, appelants) sont dans `spec.ai` du ProjectRecord,
+écrit par le CMP et appliqué par la passerelle IA. Les valeurs ci-dessous demandent au plus ces droits ;
+la passerelle refuse le reste. Les points d'accès de la plateforme sont des constantes du chart
+(`cnp-generic-app.aiPlatform`), jamais des valeurs.
+
+- **`cnp.type=agent`** (`templates/agent.yaml`) : le bloc `agent:` devient un `Agent` kagent déclaratif,
+  son `ModelConfig` et son `RemoteMCPServer` (`/mcp/<projet>`) qui pointent sur le sidecar `gw-auth-proxy`
+  (`127.0.0.1:15001`, jeton court du client `agent-<projet>-<agent>`, secret `<agent>-ai-oidc` depuis Vault
+  `project-<projet>/<agent>/ai-oidc`), une clé factice, un ServiceAccount sans jeton, une
+  CiliumNetworkPolicy (entrée : passerelle et kagent ; sortie : passerelle, Keycloak, kagent, DNS, OTLP ;
+  Internet et le reste du projet refusés) et, pour `trigger.type: schedule`, un CronJob qui appelle l'agent
+  en A2A par la passerelle. Pas de Deployment ni de Service applicatif. `agent.isolation` ne peut que
+  relever l'isolation minimale portée par le namespace.
+- **`cnp.type=mcp`** (`templates/mcp.yaml`) : kmcp lance l'image de l'app (`MCPServer`, HTTP, `/mcp`).
+  Toute autre app qui sert MCP sur `/mcp` le déclare avec `mcp.enabled`. Dans les deux cas, la passerelle
+  la joint par le Service `<app>-mcp` (port 80) et elle seule peut entrer.
+- **`ai.enabled`** : l'app reçoit `CNP_AI_GATEWAY_URL`, `CNP_AI_TOKEN_URL`, `CNP_AI_CLIENT_ID` et
+  `CNP_AI_CLIENT_SECRET` (secret `<app>-ai-oidc` depuis Vault `project-<projet>/<app>/ai-oidc`).
+
+Les presets d'agents sont dans app-templates (`agents/<id>.yaml`) ; le guide `cnp-ai` de cnp-agent-kit
+explique la déclaration complète.
+
 ## Observabilité (CNP-185, D11)
 
 Tout est désactivé par défaut : une app qui n'active rien garde exactement le même rendu.

@@ -516,3 +516,62 @@ offhours:
   sleepAt: "0 1 * * *"
   wakeAt: "0 7 * * *" 
   timezone: "Europe/Paris"
+# -----------------------------------------------------------------------------
+# AI landing zone. Rights (models, budgets, tools, isolation) are the registry
+# record's spec.ai, written by the CMP and enforced at the AI gateway: these
+# values can ask for less, never for more.
+# -----------------------------------------------------------------------------
+# Model access for this app: CNP_AI_GATEWAY_URL, CNP_AI_TOKEN_URL and the
+# app's gateway client (CNP_AI_CLIENT_ID, CNP_AI_CLIENT_SECRET, Secret
+# <app>-ai-oidc from Vault project-<project>/<app>/ai-oidc).
+ai:
+  enabled: false
+
+# An MCP server, reached by agents through the gateway on /mcp/<project> with
+# tools named <app>__<tool>. An app of type mcp is always one (kmcp runs its
+# image); any other app is one with enabled, serving MCP on /mcp.
+mcp:
+  enabled: false
+  # Container port serving /mcp. 0: the first service.ports targetPort, or 3000
+  # for an app of type mcp.
+  port: 0
+  # Tool names, for the catalogue (the gateway lists the real ones).
+  tools: []
+
+# An app of type agent: a kagent agent. Templates (app-templates agents/<id>.yaml)
+# fill this block; the CMP wizard writes it to deploy/values-<agent>.yaml.
+agent:
+  # Catalogue id of the template it came from: assistant, docs-qa,
+  # data-analyst, app-bot, ops-diagnosis, pr-review.
+  template: ""
+  description: ""
+  # One of the record's spec.ai.agents[].models.
+  model: claude-haiku-5-5
+  # low, medium or high; the gateway caps it per model.
+  effort: low
+  # Model and tool calls per task, stated in the system prompt.
+  maxSteps: 8
+  # chat (CMP test chat, API), event (an app calls it through the gateway),
+  # a2a (another agent calls it) or schedule (cron, Europe/Paris unless
+  # timeZone, sending message).
+  trigger:
+    type: chat
+  #   cron: "0 8 * * 1-5"
+  #   timeZone: Europe/Paris
+  #   message: "Fais le point sur ..."
+  # The system prompt.
+  instructions: ""
+  # <server>__<tool>, run_python, web_search: within the record's tools.
+  tools: []
+  # Optional: {name, schema}, the JSON schema of every answer.
+  output: {}
+  # Agents of the project this one calls (A2A, through the gateway).
+  calls: []
+  # Raises the namespace's minimum isolation (runc < gvisor < kata), never lowers it.
+  isolation: ""
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+    limits:
+      memory: 256Mi

@@ -142,7 +142,7 @@ always talks to the primary.
 {{- define "cnp-generic-app.containerEnv" -}}
 {{- $tracing := .Values.tracing | default dict }}
 {{- $rookBucket := and .Values.bucket.enabled (eq .Values.bucket.mode "rook") }}
-{{- if or .Values.db.enabled .Values.env $tracing.enabled $rookBucket }}
+{{- if or .Values.db.enabled .Values.env $tracing.enabled $rookBucket .Values.ai.enabled }}
 env:
   {{- if .Values.db.enabled }}
   - name: DB_TYPE
@@ -196,6 +196,24 @@ env:
   {{- end }}
   {{- if $tracing.enabled }}
   {{- include "cnp-generic-app.tracingEnv" . | trim | nindent 2 }}
+  {{- end }}
+  {{- if .Values.ai.enabled }}
+  {{- $ai := include "cnp-generic-app.aiPlatform" . | fromJson }}
+  {{- $secret := include "cnp-generic-app.aiSecretName" . }}
+  - name: CNP_AI_GATEWAY_URL
+    value: {{ $ai.gatewayURL }}
+  - name: CNP_AI_TOKEN_URL
+    value: {{ $ai.tokenURL }}
+  - name: CNP_AI_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: {{ $secret }}
+        key: client_id
+  - name: CNP_AI_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: {{ $secret }}
+        key: client_secret
   {{- end }}
   {{- with .Values.env }}
   {{- toYaml . | nindent 2 }}
@@ -608,4 +626,120 @@ to compare with.
 {{- fail (printf "ingress.hostname %q is not this app's hostname: %s/%s in %s is served at %q only" .Values.ingress.hostname $cnp.project $cnp.app $cnp.environment $expected) }}
 {{- end }}
 {{- end }}
+{{- end }}
+
+{{/*
+What the app runs when the platform, not a Deployment of this chart, runs it:
+"agent" (kagent, templates/agent.yaml) or "mcp" (kmcp, templates/mcp.yaml),
+from cnp.type, which only the ApplicationSet sets. Empty for every other app.
+*/}}
+{{- define "cnp-generic-app.aiRuntime" -}}
+{{- $type := dig "type" "" (.Values.cnp | default dict) }}
+{{- if has $type (list "agent" "mcp") }}{{ $type }}{{ end }}
+{{- end }}
+
+{{/*
+The AI landing zone's fixed endpoints. Constants, not values: an app repo that
+could point them elsewhere could send its AI client secret, or its agent's
+traffic, around the gateway. Kyverno refuses any other model endpoint too.
+*/}}
+{{- define "cnp-generic-app.aiPlatform" -}}
+{{- dict
+  "gatewayURL" "http://ai-gateway.ai-gateway.svc.cluster.local:8080"
+  "gatewayNamespace" "ai-gateway"
+  "kagentNamespace" "kagent"
+  "keycloakNamespace" "keycloak"
+  "tokenURL" "https://auth.3istor.com/realms/3istor/protocol/openid-connect/token"
+  "sidecarImage" "ghcr.io/3-istor/cnp-gw-auth-proxy:0.1.0"
+  "sidecarURL" "http://127.0.0.1:15001"
+  "curlImage" "curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777"
+  | toJson }}
+{{- end }}
+
+{{/*
+The Secret holding this app's (or agent's) AI gateway client, synced from its
+own Vault path: project-<project>/<app>/ai-oidc, keys client_id and
+client_secret, written by the CMP when it creates the Keycloak client.
+*/}}
+{{- define "cnp-generic-app.aiSecretName" -}}
+{{- printf "%s-ai-oidc" (include "cnp-generic-app.fullname" .) }}
+{{- end }}
+
+{{- define "cnp-generic-app.aiVaultSecret" -}}
+{{- $owner := include "cnp-generic-app.owner" (list . "ai") | fromJson }}
+apiVersion: ricoberger.de/v1alpha1
+kind: VaultSecret
+metadata:
+  name: {{ include "cnp-generic-app.aiSecretName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cnp-generic-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-4"
+spec:
+  path: {{ printf "%s/ai-oidc" $owner.vaultPath }}
+  vaultRole: {{ $owner.vaultRole }}
+  type: Opaque
+{{- end }}
+
+{{/*
+The port the app serves MCP on (/mcp): mcp.port, or for a Deployment app the
+targetPort of its first Service port, for a kmcp server 3000.
+*/}}
+{{- define "cnp-generic-app.mcpPort" -}}
+{{- if .Values.mcp.port }}
+{{- .Values.mcp.port }}
+{{- else if eq (include "cnp-generic-app.aiRuntime" .) "mcp" }}
+{{- 3000 }}
+{{- else }}
+{{- (index .Values.service.ports 0).targetPort }}
+{{- end }}
+{{- end }}
+
+{{/*
+The gw-auth-proxy sidecar of an agent pod (runtime image, cnp-ai-runtime):
+listens on 127.0.0.1:15001 only and puts a fresh token of the agent's
+Keycloak client on every call to the gateway. A one-item container list.
+*/}}
+{{- define "cnp-generic-app.agentSidecar" -}}
+{{- $ai := include "cnp-generic-app.aiPlatform" . | fromJson }}
+{{- $secret := include "cnp-generic-app.aiSecretName" . }}
+- name: gw-auth-proxy
+  image: {{ $ai.sidecarImage }}
+  env:
+    - name: GW_CLIENT_ID
+      valueFrom:
+        secretKeyRef:
+          name: {{ $secret }}
+          key: client_id
+    - name: GW_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: {{ $secret }}
+          key: client_secret
+    - name: GW_UPSTREAM
+      value: {{ $ai.gatewayURL }}
+  livenessProbe:
+    exec:
+      command: [/gw-auth-proxy, healthcheck]
+    periodSeconds: 20
+  readinessProbe:
+    exec:
+      command: [/gw-auth-proxy, healthcheck]
+    periodSeconds: 10
+  resources:
+    requests:
+      cpu: 5m
+      memory: 16Mi
+    limits:
+      memory: 32Mi
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+    seccompProfile:
+      type: RuntimeDefault
 {{- end }}

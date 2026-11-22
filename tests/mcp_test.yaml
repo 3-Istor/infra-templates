@@ -1,0 +1,120 @@
+suite: mcp
+templates:
+  - templates/mcp.yaml
+  - templates/deployment.yaml
+  - templates/service.yaml
+release:
+  name: shop-tools-app
+  namespace: shop-tools
+set:
+  cnp.project: shop
+  cnp.app: tools
+  cnp.environment: prod
+  fullnameOverride: tools
+  image.repository: ghcr.io/3-istor/imports/shop/tools/ci
+  image.tag: 1.2.0
+tests:
+  - it: renders nothing for an app that serves no MCP
+    template: templates/mcp.yaml
+    set:
+      cnp.type: service
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: runs an app of type mcp through kmcp, not as a Deployment
+    template: templates/deployment.yaml
+    set:
+      cnp.type: mcp
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: gives kmcp the app's image, command and port
+    template: templates/mcp.yaml
+    documentSelector: {path: kind, value: MCPServer}
+    set:
+      cnp.type: mcp
+      workload.command: [python, -u, /app/server.py]
+      env: [{name: LOG_LEVEL, value: info}]
+    asserts:
+      - equal:
+          path: spec.deployment.image
+          value: ghcr.io/3-istor/imports/shop/tools/ci:1.2.0
+      - equal:
+          path: spec.deployment.cmd
+          value: python
+      - equal:
+          path: spec.deployment.args
+          value: [-u, /app/server.py]
+      - equal:
+          path: spec.deployment.env
+          value: {LOG_LEVEL: info}
+      - equal:
+          path: spec.httpTransport
+          value: {targetPort: 3000, path: /mcp}
+
+  - it: refuses env from secrets in kmcp, which only takes literal values
+    template: templates/mcp.yaml
+    set:
+      cnp.type: mcp
+      env: [{name: TOKEN, valueFrom: {secretKeyRef: {name: x, key: y}}}]
+    asserts:
+      - failedTemplate:
+          errorPattern: "takes literal values only"
+
+  - it: exposes a kmcp server to the gateway on port 80 of <app>-mcp
+    template: templates/mcp.yaml
+    documentSelector: {path: kind, value: Service}
+    set:
+      cnp.type: mcp
+    asserts:
+      - equal:
+          path: metadata.name
+          value: tools-mcp
+      - equal:
+          path: spec.ports[0].port
+          value: 80
+      - equal:
+          path: spec.selector
+          value: {app.kubernetes.io/name: tools, app.kubernetes.io/instance: tools}
+
+  - it: exposes an app serving MCP on its own container port
+    template: templates/mcp.yaml
+    documentSelector: {path: kind, value: Service}
+    set:
+      cnp.type: service
+      mcp.enabled: true
+      service.ports: [{name: http, port: 8088, targetPort: 8088}]
+    asserts:
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 8088
+      - equal:
+          path: spec.selector
+          value: {app.kubernetes.io/name: cnp-generic-app, app.kubernetes.io/instance: shop-tools-app}
+
+  - it: lets only the gateway in
+    template: templates/mcp.yaml
+    documentSelector: {path: kind, value: CiliumNetworkPolicy}
+    set:
+      cnp.type: service
+      mcp.enabled: true
+      mcp.port: 9000
+    asserts:
+      - equal:
+          path: spec.ingress
+          value:
+            - fromEndpoints:
+                - matchLabels: {k8s:io.kubernetes.pod.namespace: ai-gateway}
+              toPorts:
+                - ports: [{port: "9000", protocol: TCP}]
+
+  - it: refuses mcp.enabled on an agent
+    template: templates/mcp.yaml
+    set:
+      cnp.type: agent
+      mcp.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "an agent is not an MCP server"

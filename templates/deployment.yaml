@@ -1,4 +1,4 @@
-{{- if not (include "cnp-generic-app.isStatefulSet" .) }}
+{{- if not (or (include "cnp-generic-app.isStatefulSet" .) (include "cnp-generic-app.aiRuntime" .)) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

@@ -1,0 +1,27 @@
+project_name: shop
+app_name: bot-reader
+fullnameOverride: bot-reader
+imagePullSecrets: []
+registrySecret: {create: false}
+ingress: {enabled: false}
+links: []
+network: {allowFrom: []}
+cnp: {project: shop, app: bot-reader, environment: prod, type: agent}
+agent:
+  template: app-bot
+  description: Lit les mentions et prépare une réponse sourcée
+  model: claude-haiku-5-5
+  effort: low
+  maxSteps: 8
+  trigger: {type: event}
+  instructions: |
+    Tu lis un fil de discussion et tu prépares une réponse vérifiée.
+  tools: [chirp-mcp__get_thread, web_search, run_python]
+  output:
+    name: bot_answer
+    schema:
+      type: object
+      required: [answer]
+      properties:
+        answer: {type: string}
+  calls: [bot-actor]
