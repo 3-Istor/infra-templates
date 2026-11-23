@@ -65,13 +65,23 @@ tests:
           path: spec.url
           value: http://127.0.0.1:15001/mcp/shop
 
-  - it: lists the MCP tools but not web_search, a model-side tool the gateway grants
+  - it: lists every tool as an MCP tool, web_search included (platform server web-search)
     template: templates/agent.yaml
     documentSelector: {path: kind, value: Agent}
     asserts:
       - equal:
           path: spec.declarative.tools[0].mcpServer.toolNames
-          value: [shop-mcp__get_thread, run_python]
+          value: [shop-mcp__get_thread, web_search, run_python]
+
+  - it: reaches web_search through the gateway even when it is the only tool
+    template: templates/agent.yaml
+    documentSelector: {path: kind, value: Agent}
+    set:
+      agent.tools: [web_search]
+    asserts:
+      - equal:
+          path: spec.declarative.tools[0].mcpServer
+          value: {apiGroup: kagent.dev, kind: RemoteMCPServer, name: bot-tools, toolNames: [web_search]}
 
   - it: calls other agents of the project by their namespace
     template: templates/agent.yaml
@@ -189,10 +199,10 @@ tests:
           path: spec.to
           value: [{group: "", kind: Service, name: bot}]
 
-  - it: renders no RemoteMCPServer for an agent without MCP tools
+  - it: renders no RemoteMCPServer for an agent without tools
     template: templates/agent.yaml
     set:
-      agent.tools: [web_search]
+      agent.tools: []
     asserts:
       - hasDocuments:
           count: 6
