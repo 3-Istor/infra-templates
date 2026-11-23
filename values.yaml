@@ -561,7 +561,8 @@ agent:
   #   message: "Fais le point sur ..."
   # The system prompt.
   instructions: ""
-  # <server>__<tool>, run_python, web_search: within the record's tools.
+  # <server>__<tool>, run_python, web_search (all MCP tools through the
+  # gateway): within the record's tools.
   tools: []
   # Optional: {name, schema}, the JSON schema of every answer.
   output: {}

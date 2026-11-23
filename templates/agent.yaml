@@ -25,7 +25,6 @@
 {{- if has $name $agent.calls }}
 {{- fail "agent.calls cannot name the agent itself" }}
 {{- end }}
-{{- $mcpTools := without $agent.tools "web_search" }}
 {{- $labels := include "cnp-generic-app.labels" . }}
 {{- $systemMessage := trim $agent.instructions }}
 {{- $systemMessage = printf "%s\n\n## Limites\nTu disposes d'au plus %d étapes (appels de modèle et d'outils) pour cette tâche. Si tu ne peux pas conclure, réponds avec ce que tu as établi et dis ce qui manque." $systemMessage (int $agent.maxSteps) }}
@@ -59,7 +58,7 @@ spec:
     x-cnp-effort: {{ $agent.effort }}
   anthropic:
     baseUrl: {{ $ai.sidecarURL }}
-{{- if $mcpTools }}
+{{- if $agent.tools }}
 ---
 apiVersion: kagent.dev/v1alpha2
 kind: RemoteMCPServer
@@ -111,16 +110,16 @@ spec:
           description: {{ $agent.description | default (printf "Agent %s du projet %s" $name $owner.project) | quote }}
           inputModes: [text]
           outputModes: [text]
-    {{- if or $mcpTools $agent.calls }}
+    {{- if or $agent.tools $agent.calls }}
     tools:
-      {{- if $mcpTools }}
+      {{- if $agent.tools }}
       - type: McpServer
         mcpServer:
           apiGroup: kagent.dev
           kind: RemoteMCPServer
           name: {{ $name }}-tools
           toolNames:
-            {{- range $mcpTools }}
+            {{- range $agent.tools }}
             - {{ . }}
             {{- end }}
       {{- end }}
