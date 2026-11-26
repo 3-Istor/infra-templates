@@ -1097,14 +1097,6 @@
         }
       }
     },
-    "logRetention": {
-      "enum": [
-        "",
-        "7d",
-        "14d",
-        "30d"
-      ]
-    },
     "offhours": {
       "type": "object",
       "additionalProperties": false,
