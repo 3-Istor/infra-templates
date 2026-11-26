@@ -124,7 +124,7 @@ tests:
     asserts:
       - equal:
           path: spec.path
-          value: project-shop/bot/ai-oidc
+          value: project-shop/bot/prod/ai-oidc
       - equal:
           path: spec.vaultRole
           value: shop-bot-role

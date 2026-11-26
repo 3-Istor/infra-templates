@@ -31,7 +31,7 @@ tests:
           value: api-ai-oidc
       - equal:
           path: spec.path
-          value: project-shop/api/ai-oidc
+          value: project-shop/api/prod/ai-oidc
 
   - it: gives the app the gateway, the token endpoint and its client
     template: templates/deployment.yaml
