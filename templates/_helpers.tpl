@@ -458,32 +458,25 @@ Called with (list $ctx "<feature>"); use with fromJson.
   "environment" $env
   "namespace" $namespace
   "vaultRole" (printf "%s-%s%s-role" $cnp.project $cnp.app (ternary "-staging" "" $staging))
-  "vaultPath" (printf "project-%s/%s%s" $cnp.project $cnp.app (ternary "/staging" "" $staging))
+  "vaultPath" (printf "project-%s/%s/%s" $cnp.project $cnp.app $env)
   | toJson }}
 {{- end }}
 
 {{/*
-The app's VaultSecret path and role. secrets.vaultPath may name a sub-path of
-the app's own Vault path, nothing else; secrets.vaultRole may only repeat the
-app's role. Both are kept in values for existing files, the role rendered is
-always the derived one. Called with (list $ctx "<feature>"); use with fromJson.
+The app's VaultSecret path and role, both derived: <app's Vault path>/secrets
+and the app's role. secrets.vaultPath is ignored (existing values files still
+carry the old layout); secrets.vaultRole may only repeat the app's role.
+Called with (list $ctx "<feature>"); use with fromJson.
 */}}
 {{- define "cnp-generic-app.vault" -}}
 {{- $ctx := index . 0 }}
 {{- $owner := include "cnp-generic-app.owner" . | fromJson }}
-{{- $path := $ctx.Values.secrets.vaultPath | default $owner.vaultPath | trimSuffix "/" }}
-{{- if not (or (eq $path $owner.vaultPath) (hasPrefix (printf "%s/" $owner.vaultPath) $path)) }}
-{{- fail (printf "secrets.vaultPath %q is outside this app's Vault path %q" $path $owner.vaultPath) }}
-{{- end }}
-{{- if or (contains "/../" (printf "%s/" $path)) (contains "//" $path) }}
-{{- fail (printf "secrets.vaultPath %q is not a plain path" $path) }}
-{{- end }}
 {{- with $ctx.Values.secrets.vaultRole }}
 {{- if ne . $owner.vaultRole }}
 {{- fail (printf "secrets.vaultRole %q is not this app's role %q" . $owner.vaultRole) }}
 {{- end }}
 {{- end }}
-{{- dict "path" $path "role" $owner.vaultRole | toJson }}
+{{- dict "path" (printf "%s/secrets" $owner.vaultPath) "role" $owner.vaultRole | toJson }}
 {{- end }}
 
 {{/*
@@ -658,7 +651,7 @@ traffic, around the gateway. Kyverno refuses any other model endpoint too.
 
 {{/*
 The Secret holding this app's (or agent's) AI gateway client, synced from its
-own Vault path: project-<project>/<app>/ai-oidc, keys client_id and
+own Vault path: project-<project>/<app>/<env>/ai-oidc, keys client_id and
 client_secret, written by the CMP when it creates the Keycloak client.
 */}}
 {{- define "cnp-generic-app.aiSecretName" -}}

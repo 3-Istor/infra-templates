@@ -97,7 +97,7 @@ tests:
           of: VaultSecret
       - equal:
           path: spec.path
-          value: project-shop/api/bucket
+          value: project-shop/api/prod/bucket
       - equal:
           path: spec.vaultRole
           value: shop-api-role

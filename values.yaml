@@ -70,8 +70,7 @@ ingress:
 # Vault Secrets Operator Configuration
 secrets:
   enabled: false
-  # Optional. Defaults to project-<cnp.project>/<cnp.app>[/staging]; anything
-  # else must be a sub-path of it.
+  # Ignored: the path is always project-<cnp.project>/<cnp.app>/<prod|staging>/secrets.
   vaultPath: ""
   # Optional. Always rendered as <cnp.project>-<cnp.app>[-staging]-role; any
   # other value fails the render.
@@ -86,7 +85,7 @@ registrySecret:
   # A second app in the namespace (a frontend) sets its own name, so it never
   # waits for the secret of another Argo CD Application.
   name: app-registry
-  # app reads secrets.vaultPath/registry with the app's role. project reads the
+  # app reads project-<p>/<app>/<env>/registry with the app's role. project reads the
   # project's credential (templates/registry-secret.yaml), for imported apps.
   scope: app
 
