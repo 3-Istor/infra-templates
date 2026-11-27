@@ -14,6 +14,10 @@ metadata:
     ("/" stays, a query may carry it unescaped). */}}
     {{- $monitoringPath := .Values.monitoring.path | default "/" }}
     gatus.3istor.com/{{ .Values.project_name }}-endpoint: |
+      {{- /* Prod and staging share resource names; Gatus refuses duplicates. */}}
+      {{- if eq (include "cnp-generic-app.environment" .) "staging" }}
+      name: {{ printf "%s (staging)" (include "cnp-generic-app.fullname" .) | quote }}
+      {{- end }}
       group: "Services Internes"
       {{- if .Values.offhours.enabled }}
       url: {{ printf "http://offhours-guard.%s-system.svc.cluster.local:8082/health/%s/%s?port=%v&path=%s" .Values.project_name .Release.Namespace (include "cnp-generic-app.fullname" .) (index .Values.service.ports 0).port ($monitoringPath | urlquery | replace "%2F" "/") | quote }}

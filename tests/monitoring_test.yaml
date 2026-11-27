@@ -81,3 +81,27 @@ tests:
       - matchRegex:
           path: metadata.annotations["gatus.3istor.com/shop-endpoint"]
           pattern: 'port=8000&path=/api/health-1.0"\n'
+
+  - it: names the staging internal check apart from prod
+    template: templates/service.yaml
+    set:
+      environment: staging
+      ingress.enabled: false
+      monitoring.path: /health
+    asserts:
+      - matchRegex:
+          path: metadata.annotations["gatus.3istor.com/shop-endpoint"]
+          pattern: '^name: "web \(staging\)"\ngroup: "Services Internes"\n'
+
+  - it: names the staging public check apart from prod
+    template: templates/httproute.yaml
+    set:
+      environment: staging
+      cnp.environment: staging
+      ingress.enabled: true
+      ingress.hostname: web-shop-staging.3istor.com
+      monitoring.path: /health
+    asserts:
+      - matchRegex:
+          path: metadata.annotations["gatus.3istor.com/shop-endpoint"]
+          pattern: '^name: "web-route \(staging\)"\ngroup: "Applications"\n'
